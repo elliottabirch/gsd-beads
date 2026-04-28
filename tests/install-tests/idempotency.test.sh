@@ -84,12 +84,15 @@ else
   _fail "CASE 3: $symlink is not a symlink after install"
 fi
 
-# CASE 4: 7 bd memories present after both runs (idempotent forget+remember)
-count=$({ bd memories 2>/dev/null | grep -cF 'gsd-beads:'; } || echo 0)
-if [ "$count" = "7" ]; then
-  _pass "CASE 4: exactly 7 gsd-beads:* memories after second install (count=$count)"
+# CASE 4: 8 bd memories present after both runs (idempotent forget+remember)
+# Memory #8 `gsd-beads:worktrees` added by Phase 03 Plan 03-03.
+# bd memories output uses 2-space-indented keys; tighter regex avoids counting value lines
+# that contain a literal `gsd-beads:` substring (pre-existing dev-env stray-key guard).
+count=$({ bd memories 2>/dev/null | grep -cE '^  gsd-beads:'; } || echo 0)
+if [ "$count" = "8" ]; then
+  _pass "CASE 4: exactly 8 gsd-beads:* memories after second install (count=$count)"
 else
-  _fail "CASE 4: expected 7 gsd-beads:* memories, got $count"
+  _fail "CASE 4: expected 8 gsd-beads:* memories, got $count"
 fi
 
 export HOME="$saved_home"
