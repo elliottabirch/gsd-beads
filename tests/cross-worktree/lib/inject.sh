@@ -22,7 +22,16 @@
 # D-13 #1.
 # ---------------------------------------------------------------------------
 inject_source_beads_deleted() {
-  local source_root="$1"
+  # WR-06 fix: empty-arg guard. A future caller bug that omits the argument
+  # (or passes an unset variable under set -u) would otherwise degrade the
+  # `rm -rf` to `rm -rf "/.beads"`. Conservative denylist also rejects "/",
+  # $HOME, and /tmp — none of which a sandbox source_root should ever be.
+  local source_root="${1:?inject_source_beads_deleted: source_root required}"
+  case "$source_root" in
+    ""|"/"|"/tmp"|"$HOME")
+      echo "[INJECT D-13.1] refusing unsafe source_root: '$source_root'" >&2
+      return 2 ;;
+  esac
   echo "[INJECT D-13.1] removing $source_root/.beads (DESTRUCTIVE)"
   rm -rf "$source_root/.beads"
   # Caller asserts: bd commands now fail with "no .beads/" / "database not found" / similar.
@@ -96,7 +105,15 @@ inject_concurrent_regen() {
 # D-13 #3.
 # ---------------------------------------------------------------------------
 inject_source_renamed() {
-  local source_root="$1"
+  # WR-06 fix: empty-arg guard (see inject_source_beads_deleted above).
+  # `mv "" ".renamed"` is merely an error rather than data loss, but the
+  # same denylist keeps the destructive-by-design library consistent.
+  local source_root="${1:?inject_source_renamed: source_root required}"
+  case "$source_root" in
+    ""|"/"|"/tmp"|"$HOME")
+      echo "[INJECT D-13.3] refusing unsafe source_root: '$source_root'" >&2
+      return 2 ;;
+  esac
   echo "[INJECT D-13.3] renaming $source_root → ${source_root}.renamed (DESTRUCTIVE)"
   mv "$source_root" "${source_root}.renamed"
   echo "[INJECT D-13.3] recovery hint (per D-14): \`git config --worktree gsd-beads.dir ${source_root}.renamed/.beads\`"
