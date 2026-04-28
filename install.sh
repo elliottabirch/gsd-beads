@@ -128,6 +128,27 @@ if [ -d "$PWD/.beads" ] && [ "$PWD" != "$REPO" ]; then
   echo "appended worktree shim to $target"
 fi
 
+# ── Step 6.5: Worktree backfill (D-08) ──────────────────────────────
+# After appending the shim at Step 6, re-fire it against every pre-existing
+# worktree so they all gain `git config --worktree gsd-beads.dir` + the marker.
+# Idempotent: the shim's marker-gate makes second invocations no-ops.
+# Skips `bare` and `prunable` records (RESEARCH.md §Pattern 2).
+# Same gate as Step 6: only on a beads-managed project, not on the gsd-beads repo itself.
+if [ -d "$PWD/.beads" ] && [ "$PWD" != "$REPO" ]; then
+  REPO_BEADS_DIR="$PWD/.beads"
+  git -C "$PWD" worktree list --porcelain | awk '
+    /^worktree / { p = substr($0, 10); s = 0; next }
+    /^bare$/      { s = 1; next }
+    /^prunable/   { s = 1; next }
+    NF == 0       { if (p != "" && !s) print p; p = ""; s = 0 }
+    END           { if (p != "" && !s) print p }
+  ' | while IFS= read -r wt_path; do
+    [ -d "$wt_path" ] || continue
+    ( cd "$wt_path" && bash "$REPO_BEADS_DIR/hooks/post-checkout" HEAD HEAD 1 ) || true
+  done
+  echo "backfilled gsd-beads config across $(git -C "$PWD" worktree list --porcelain | awk '/^worktree /{c++} END{print c+0}') worktree record(s)"
+fi
+
 # ── Step 7: Register bd recipe (informational discovery — D-03 revised) ─
 bd setup --add gsd-beads "$REPO/recipe/gsd-beads-recipe.md" 2>/dev/null || true
 
