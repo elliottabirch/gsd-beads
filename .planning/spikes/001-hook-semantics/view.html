@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Spike 001 — Hook Semantics</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 14px ui-monospace, "JetBrains Mono", Consolas, monospace; background:#0e1116; color:#d6deeb; max-width:1100px; margin:32px auto; padding:0 24px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  .sub { color:#7a8597; margin-bottom:24px; }
+  .summary { display:flex; gap:24px; margin: 16px 0 28px; }
+  .stat { background:#161b22; border:1px solid #30363d; padding:14px 18px; border-radius:8px; min-width:120px; }
+  .stat .num { font-size:28px; font-weight:600; }
+  .stat .lbl { color:#7a8597; font-size:12px; text-transform:uppercase; letter-spacing:0.6px; }
+  .ok { color:#7ee787; }
+  .bad { color:#ff6b6b; }
+  .meta { color:#7a8597; font-size:12px; }
+  h2 { font-size:16px; border-bottom:1px solid #30363d; padding-bottom:6px; margin: 28px 0 8px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid #21262d; vertical-align:top; }
+  th { color:#7a8597; font-weight:500; text-transform:uppercase; font-size:11px; letter-spacing:0.6px; }
+  td.status { font-weight:600; width:60px; }
+  td.tool { color:#79c0ff; width:60px; }
+  td.kind { color:#d2a8ff; }
+  td.path, td.cmd { color:#a5d6ff; word-break:break-all; }
+  td.reason { color:#a8b3c7; font-style:italic; max-width:400px; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; }
+  .pill.deny { background:#3a1d1d; color:#ff7373; }
+  .pill.allow { background:#0f2818; color:#7ee787; }
+  .pill.yes { background:#0f2818; color:#7ee787; }
+  .pill.no { background:#2a2a2a; color:#9aa4b3; }
+  .verdict { margin-top:36px; padding:18px; background:#0f2818; border:1px solid #1a4d2e; border-radius:8px; }
+  .verdict.bad { background:#3a1d1d; border-color:#5d2222; }
+  #empty { color:#7a8597; padding:40px; text-align:center; border:1px dashed #30363d; border-radius:8px; }
+</style>
+</head>
+<body>
+<h1>Spike 001 — Hook Semantics</h1>
+<div class="sub">PreToolUse(Edit|Write) blocks state-bearing markdown · PostToolUse(Bash, if="Bash(bd *)") fires reliably</div>
+
+<div id="root">
+  <div id="empty">Run <code>./test-runner.sh</code> first, then refresh this page.</div>
+</div>
+
+<script>
+async function load() {
+  let data;
+  try {
+    const res = await fetch('./results/results.json');
+    data = await res.json();
+  } catch (e) {
+    document.getElementById('empty').textContent = 'No results yet. Run ./test-runner.sh first.';
+    return;
+  }
+  if (!data) return;
+
+  const root = document.getElementById('root');
+  const verdictClass = data.failed === 0 ? 'verdict' : 'verdict bad';
+  const verdictText = data.failed === 0
+    ? 'VALIDATED ✓ — Every assertion held: state-bearing paths are denied with a structured reason that the agent will see; non-state paths pass through; the if-filter on Bash(bd *) correctly narrows PostToolUse fires; 50/50 high-volume calls were recorded.'
+    : 'PARTIAL ⚠ — One or more assertions failed. See the FAIL rows below.';
+
+  const groups = {};
+  for (const c of data.cases) {
+    (groups[c.suite] = groups[c.suite] || []).push(c);
+  }
+
+  let html = `
+    <div class="summary">
+      <div class="stat"><div class="num ok">${data.passed}</div><div class="lbl">Passed</div></div>
+      <div class="stat"><div class="num ${data.failed?'bad':'ok'}">${data.failed}</div><div class="lbl">Failed</div></div>
+      <div class="stat"><div class="num">${data.total}</div><div class="lbl">Total</div></div>
+      <div class="stat"><div class="num">${data.cases.length}</div><div class="lbl">Cases</div></div>
+    </div>
+    <div class="meta">Generated ${data.generated_at}</div>
+  `;
+
+  for (const [suite, cases] of Object.entries(groups)) {
+    html += `<h2>${suite}</h2>`;
+    html += '<table><thead><tr>';
+    if (suite.startsWith('block-state-md')) {
+      html += '<th>Status</th><th>Case</th><th>Tool</th><th>file_path</th><th>Expect</th><th>Got</th><th>Reason shown to Claude</th>';
+    } else if (suite === 'reliability') {
+      html += '<th>Status</th><th>Case</th><th>Expect</th><th>Got</th>';
+    } else {
+      html += '<th>Status</th><th>Case</th><th>Bash command</th><th>Expect fired</th><th>Got</th>';
+    }
+    html += '</tr></thead><tbody>';
+    for (const c of cases) {
+      const sCls = c.status === 'PASS' ? 'ok' : 'bad';
+      if (suite.startsWith('block-state-md')) {
+        html += `<tr>
+          <td class="status ${sCls}">${c.status}</td>
+          <td>${c.name}</td>
+          <td class="tool">${c.tool}</td>
+          <td class="path">${c.file_path.replace(/^.*\/fixtures\/fake-gsd-project/, '<project>')}</td>
+          <td><span class="pill ${c.expect}">${c.expect}</span></td>
+          <td><span class="pill ${c.got}">${c.got}</span></td>
+          <td class="reason">${c.reason || '—'}</td>
+        </tr>`;
+      } else if (suite === 'reliability') {
+        html += `<tr>
+          <td class="status ${sCls}">${c.status}</td>
+          <td>${c.name}</td>
+          <td>${c.expect}</td>
+          <td>${c.got}</td>
+        </tr>`;
+      } else {
+        html += `<tr>
+          <td class="status ${sCls}">${c.status}</td>
+          <td>${c.name}</td>
+          <td class="cmd">${c.command}</td>
+          <td><span class="pill ${c.expect}">${c.expect}</span></td>
+          <td><span class="pill ${c.got}">${c.got}</span></td>
+        </tr>`;
+      }
+    }
+    html += '</tbody></table>';
+  }
+
+  html += `<div class="${verdictClass}">${verdictText}</div>`;
+  root.innerHTML = html;
+}
+load();
+</script>
+</body>
+</html>
