@@ -36,5 +36,5 @@ Plans:
 Verify shared `BEADS_DIR` works across multiple worktrees in real use. Document
 the recommended worktree setup.
 
-**Status:** pending
+**Status:** complete (2026-04-28)
 **Depends on:** Phase 2
