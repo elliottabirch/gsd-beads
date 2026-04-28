@@ -37,8 +37,15 @@ install_file "$REPO/scripts/regen-requirements.sh"    "$SCRIPTS_DEST/regen-requi
 
 # ── Step 3: Settings.json deep-merge with dedup (Pitfall 6) ─────────
 # Dedup key: (matcher, command, if) — unique_by("\(.command)\(.if // "")") within each matcher group.
+# Path substitution (Gap 1 fix): settings.fragment.json contains
+# `$CLAUDE_PROJECT_DIR/.claude/hooks/...` placeholders. Claude Code expands
+# `$CLAUDE_PROJECT_DIR` to the user's project directory, NOT to ~/.claude/.
+# Hooks live at $HOOKS_DEST. Substitute in-flight before merge so the
+# on-disk fragment is unchanged but merged settings.json has resolvable paths.
 # Atomic write: mktemp+mv (T-02-07 mitigation).
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
+fragment_resolved="$(mktemp)"
+sed "s|\$CLAUDE_PROJECT_DIR/.claude/hooks|$HOOKS_DEST|g" "$FRAGMENT" > "$fragment_resolved"
 tmp="$(mktemp)"
 jq -s '
 .[0] as $existing | .[1] as $fragment |
@@ -58,8 +65,9 @@ jq -s '
     )
   )
 }
-' "$SETTINGS" "$FRAGMENT" > "$tmp"
+' "$SETTINGS" "$fragment_resolved" > "$tmp"
 mv "$tmp" "$SETTINGS"
+rm -f "$fragment_resolved"
 
 # ── Step 4: Shadow binary symlink + PATH precedence check (RESEARCH.md A5) ─
 # Volta trap: ~/.volta/bin/gsd-sdk may shadow our ~/.local/bin/gsd-sdk.
