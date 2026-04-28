@@ -107,9 +107,9 @@ DISCUSSION-LOG.md.
   "Upstream `/gsd-*` commands route to bd transparently in beads
   managed projects via the gsd-sdk shadow." Users see this context at
   every session start.
-- **D-08:** **Substitutes are a Phase 3 candidate** if user feedback
+- **D-08 [informational]:** **Substitutes are a Phase 3 candidate** if user feedback
   indicates the lack of `/gsd-beads-*` prefix is confusing. Filed as
-  deferred — not load-bearing for MVP.
+  deferred — not load-bearing for MVP. (No Phase 2 implementation work; tracked under Deferred Ideas.)
 
 ### Mutation Event Emission (re-wrap manually in Phase 2)
 - **D-09:** **Re-wrap our 13 handler overrides with GSDEvent emission**
@@ -132,10 +132,14 @@ DISCUSSION-LOG.md.
   Apply to all 13 handlers post-register. Adds ~30 lines of helper +
   13 wrapping calls. Preserves the dashboard/observability story for
   free.
-- **D-10:** **Reuse upstream's `buildMutationEvent` if reachable.**
-  Upstream's `cli.js` references it inline; if it's not exported, we
-  rebuild the event shape from documented fields. Either way our events
-  are GSDEvent-compatible.
+- **D-10 [informational]:** Superseded by RESEARCH.md Pitfall 2. Originally:
+  "Reuse upstream's `buildMutationEvent` if reachable." Research empirically
+  verified `buildMutationEvent` is **not exported** from upstream's
+  `dist/query/index.js` (module-internal, line 121). The "rebuild from
+  documented fields" branch is the only viable path. Plan 02-03 builds
+  `bin/wrap-mutation.mjs` reproducing the prefix-dispatch logic + snapshot
+  test against upstream's wrap-pass output. Outcome unchanged (events are
+  GSDEvent-compatible); decision now reflects empirical reality.
 
 ### Claude's Discretion
 - Specific test framework (vitest vs node:test vs bash + jq for the
