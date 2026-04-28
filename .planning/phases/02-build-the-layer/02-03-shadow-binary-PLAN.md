@@ -32,12 +32,14 @@ must_haves:
     - "Shadow detects beads-managed projects via existsSync('.beads/metadata.json') (Spike 013)"
     - "Shadow falls through to spawnUpstream(argv) for non-query, non-overridden commands, and non-beads-managed projects (REQ-02 — passthrough preserves upstream behavior)"
     - "wrap-mutation.mjs reproduces upstream buildMutationEvent's prefix-dispatch logic (Pitfall 2 — buildMutationEvent NOT exported)"
+    - "Per D-02, all 13 BEADS_OVERRIDES handlers live in a single `bin/gsd-sdk-shadow.mjs` (not split per-handler) — shared `spawnUpstream` + argv routing scaffolding (B3 fix — D-02 explicit reference)."
     - "argv routing handles --project-dir AFTER `query <cmd>` per Pitfall 4 (Spike 013 iter-4)"
     - "Each of 13 handlers calls bd CLI subprocess, returns { data: {...} } QueryResult shape"
-    - "Snapshot test for wrap-mutation asserts our helper's output matches upstream's wrap-pass for 5+ command shapes (Pitfall 2 mitigation)"
+    - "wrap-mutation runs as a no-op in MVP (eventStream=null in production); the helper exists for forward-compat with a future dashboard / GSDEvent consumer (D-09 preserved). W3 fix — production wrap-pass is a no-op behind the null eventStream."
+    - "Snapshot test for wrap-mutation uses a SPY pattern (mock eventStream + mock handler) and asserts the captured event shape vs the documented buildMutationEvent contract — does NOT invoke real upstream handlers (W2 fix — Pitfall 2 mitigation via in-process spy, no upstream side effects)."
   artifacts:
     - path: "bin/gsd-sdk-shadow.mjs"
-      provides: "Y1 shadow gsd-sdk binary with 13 bd-backed mutation handlers"
+      provides: "Y1 shadow gsd-sdk binary with 13 bd-backed mutation handlers (single file per D-02)"
       min_lines: 250
     - path: "bin/wrap-mutation.mjs"
       provides: "GSDEvent emission helper reproducing upstream's prefix dispatch"
@@ -45,7 +47,7 @@ must_haves:
     - path: "tests/shadow-tests/argv-routing.test.mjs"
       provides: "Tests for query detection, --project-dir parsing, --pick handling, non-beads passthrough"
     - path: "tests/shadow-tests/wrap-mutation.test.mjs"
-      provides: "Snapshot test against upstream's wrap-pass output"
+      provides: "Spy-based snapshot test against documented buildMutationEvent contract (W2 fix)"
     - path: "tests/shadow-tests/handler-*.test.mjs"
       provides: "Per-handler tests for all 13 BEADS_OVERRIDES entries"
   key_links:
@@ -69,6 +71,10 @@ must_haves:
 
 <objective>
 Build the shadow `gsd-sdk` binary (Architecture Y1, registry-override variant — D-09). The shadow imports upstream's SDK primitives via dynamic ESM import, registers 13 bd-backed handler overrides, dispatches via the SDK's own machinery, and falls through to upstream for everything else. Adds a `wrap-mutation.mjs` helper to re-emit GSDEvents (Pitfall 2 — `buildMutationEvent` is NOT exported by upstream so we reproduce it).
+
+**Per D-02 (CONTEXT.md):** all 13 handlers live in a SINGLE file `bin/gsd-sdk-shadow.mjs` (not split per-handler) — they share argv routing + spawnUpstream + import boilerplate. Per-handler tests live separately under `tests/shadow-tests/handler-*.test.mjs`.
+
+**MVP wrap-pass clarification (W3 fix):** in production, `eventStream=null`, so `wrapMutation` is a NO-OP — it returns the handler's result and the `?.emitEvent` chain short-circuits. The helper exists in MVP solely for forward-compat with a future dashboard/GSDEvent consumer (preserves D-09's option without shipping a consumer).
 
 Plan 02-02 must be complete first (the defensive-backup hook depends on the shadow being the primary mutation path). Wave-2 alongside Plan 02-04 (worktree-init) which has no file conflicts.
 
@@ -194,14 +200,15 @@ bd CLI commands available to handlers:
     - CASE 8: `query phase.add "X" --project-dir /tmp/test` — projectDir parsed correctly (Pitfall 4)
     - CASE 9: `--project-dir` BEFORE `query` — still works (argv.indexOf is position-agnostic for the FIND, but dispatch happens after queryIdx — verify both shapes)
 
-    `tests/shadow-tests/wrap-mutation.test.mjs` — list these CASEs:
+    `tests/shadow-tests/wrap-mutation.test.mjs` — list these CASEs (W2 fix — spy-based, no upstream invocation):
     - CASE 1: phase.add — buildMutationEvent emits StateMutation type with cmd, args, success
     - CASE 2: roadmap.update-plan-progress — same shape
     - CASE 3: requirements.mark-complete — same
     - CASE 4: todo.complete — same
     - CASE 5: milestone.complete — same
-    - CASE 6: snapshot equality vs upstream — build a NON-overridden registry via `createRegistry(eventStream, sessionId)`, capture event for `progress`, then run our `wrapMutation`-wrapped handler, assert event objects deep-equal except timestamp
+    - CASE 6: SPY snapshot — wrapMutation wraps a mock handler that returns a fixed result; mock eventStream captures emitted events; assert captured event matches the documented buildMutationEvent contract (no upstream handler invocation, no filesystem side effects).
     - CASE 7: fire-and-forget — eventStream throws → handler still returns result
+    - CASE 8: NULL eventStream — handler with eventStream=null/undefined still returns result (no crash on `?.emitEvent`); MVP production behavior (W3 fix).
 
     Make all 14 files importable: `node --check tests/shadow-tests/<file>.test.mjs` exits 0 for each.
   </action>
@@ -213,7 +220,7 @@ bd CLI commands available to handlers:
     - `node --check tests/shadow-tests/argv-routing.test.mjs && node --check tests/shadow-tests/wrap-mutation.test.mjs` — syntax-clean.
     - Running any handler test stub via `node --test tests/shadow-tests/handler-phase-add.test.mjs` exits non-zero (Wave 0 red).
     - `grep -c '// CASE' tests/shadow-tests/argv-routing.test.mjs` returns at least 8.
-    - `grep -c '// CASE' tests/shadow-tests/wrap-mutation.test.mjs` returns at least 6.
+    - `grep -c '// CASE' tests/shadow-tests/wrap-mutation.test.mjs` returns at least 8.
   </acceptance_criteria>
   <verify>
     <automated>for f in tests/shadow-tests/*.test.mjs; do node --check "$f" || exit 1; done; ls tests/shadow-tests/handler-*.test.mjs | wc -l | grep -q '^13$'</automated>
@@ -222,7 +229,7 @@ bd CLI commands available to handlers:
 </task>
 
 <task type="auto" tdd="true">
-  <name>Task 2 (Wave 2): Implement bin/wrap-mutation.mjs + complete its snapshot test</name>
+  <name>Task 2 (Wave 2): Implement bin/wrap-mutation.mjs + complete its spy-based snapshot test</name>
   <files>
     bin/wrap-mutation.mjs,
     tests/shadow-tests/wrap-mutation.test.mjs
@@ -235,9 +242,9 @@ bd CLI commands available to handlers:
   </read_first>
   <behavior>
     - Test 1-5 (5 prefix branches): for cmd in [phase.add, roadmap.update-plan-progress, requirements.mark-complete, todo.complete, milestone.complete] — buildMutationEvent returns object with shape `{ timestamp, sessionId, type, command, fields, success }` and correct GSDEventType.
-    - Test 6 (SNAPSHOT vs UPSTREAM): build NON-overridden registry via upstream `createRegistry(eventStream, sessionId)`. Run a sample command. Capture eventStream's emitted event. Compare against our wrap's emit for the same inputs. Deep-equal modulo timestamp.
-    - Test 7 (FIRE-AND-FORGET): eventStream throws synchronously → handler still returns result without re-throwing.
-    - Test 8 (NULL eventStream): handler with eventStream=undefined still returns result (no crash on `?.emitEvent`).
+    - Test 6 (SPY SNAPSHOT — W2 fix): use a mock eventStream `{ emitEvent: (e) => captured.push(e) }` and a mock handler `async () => ({ ok: true })`. Call `wrapMutation(handler, 'phase.add', eventStream, 'session-id')` and invoke the wrapped handler with sample args. Assert exactly one event was captured and matches the documented buildMutationEvent shape (modulo timestamp). NO upstream handler invocation, NO filesystem mutations.
+    - Test 7 (FIRE-AND-FORGET): eventStream's emitEvent throws synchronously → wrapped handler still returns the handler's result without re-throwing.
+    - Test 8 (NULL eventStream — W3 fix): wrapMutation called with eventStream=null (production MVP path). Wrapped handler returns the handler's result; no crash on `?.emitEvent`. Confirms wrap-pass is a no-op in MVP.
   </behavior>
   <action>
     **Step A: Implement `bin/wrap-mutation.mjs`.** Per RESEARCH.md Code Example 4 + PATTERNS.md lines 586-611. The 7 prefix branches from upstream lines 121-199.
@@ -247,7 +254,7 @@ bd CLI commands available to handlers:
     //                     lines 121-199 (buildMutationEvent body — NOT EXPORTED)
     //                     lines 486-503 (wrapMutation wrapper pattern)
     // Pitfall 2 mitigation: re-implemented because upstream does not export buildMutationEvent.
-    // Snapshot test in tests/shadow-tests/wrap-mutation.test.mjs verifies parity.
+    // Spy-based snapshot test in tests/shadow-tests/wrap-mutation.test.mjs verifies parity.
 
     const SDK_BASE = process.env.GSD_SDK_PATH
       ?? `${process.env.HOME}/.volta/tools/image/packages/get-shit-done-cc/lib/node_modules/get-shit-done-cc`;
@@ -302,6 +309,7 @@ bd CLI commands available to handlers:
     /**
      * Wrap a QueryHandler with GSDEvent emission post-execution.
      * Fire-and-forget: emit errors do NOT propagate.
+     * NULL eventStream → no-op (MVP production path; W3 invariant).
      */
     export function wrapMutation(handler, cmd, eventStream, sessionId) {
       return async (args, projectDir) => {
@@ -316,28 +324,50 @@ bd CLI commands available to handlers:
     }
     ```
 
-    **Step B: Fill in `tests/shadow-tests/wrap-mutation.test.mjs`.** Use `node:test`. Import `wrapMutation` and `buildMutationEvent` from `../../bin/wrap-mutation.mjs`. Implement the 6+ CASEs:
+    **Step B: Fill in `tests/shadow-tests/wrap-mutation.test.mjs` using a SPY pattern (W2 fix — no upstream invocation, no real handlers).** Use `node:test`. Import `wrapMutation` and `buildMutationEvent` from `../../bin/wrap-mutation.mjs`. Implement Tests 1-8:
 
-    For Test 6 (snapshot vs upstream), reach into upstream:
+    Test 6 (SPY SNAPSHOT — W2 fix) example:
     ```javascript
-    const queryModule = await import(QUERY_INDEX_PATH);
-    const captured = [];
-    const eventStream = { emitEvent: (e) => captured.push(e) };
-    const upstreamRegistry = queryModule.createRegistry(eventStream, 'test-session');
-    // Run a non-overridden command — upstream's wrap-pass fires
-    await upstreamRegistry.dispatch('progress', [], '/tmp/fake');  // upstream may error; that's fine
-    const upstreamEvent = captured[0];
-    // Compare to our wrapper's output
-    const wrappedHandler = wrapMutation(async () => ({data:{}}), 'progress', eventStream, 'test-session');
-    captured.length = 0;
-    await wrappedHandler([], '/tmp/fake');
-    const ourEvent = captured[0];
-    // Deep equal modulo timestamp
-    delete upstreamEvent.timestamp; delete ourEvent.timestamp;
-    assert.deepStrictEqual(ourEvent, upstreamEvent);
+    import { test } from 'node:test';
+    import assert from 'node:assert/strict';
+    import { wrapMutation, buildMutationEvent } from '../../bin/wrap-mutation.mjs';
+
+    test('CASE 6: spy snapshot — wrapMutation captures expected event shape', async () => {
+      const captured = [];
+      const eventStream = { emitEvent: (e) => captured.push(e) };
+      const mockHandler = async (args, projectDir) => ({ ok: true, args, projectDir });
+
+      const wrapped = wrapMutation(mockHandler, 'phase.add', eventStream, 'session-id');
+      const result = await wrapped(['Test phase', 'extra'], '/proj');
+
+      assert.equal(captured.length, 1, 'exactly one event captured');
+      const event = captured[0];
+      // Compare against documented buildMutationEvent contract (modulo timestamp)
+      assert.equal(event.sessionId, 'session-id');
+      assert.equal(event.command, 'phase.add');
+      assert.deepStrictEqual(event.fields, ['Test phase', 'extra']);
+      assert.equal(event.success, true);
+      assert.match(event.type, /StateMutation|state-mutation/i); // GSDEventType enum value
+      assert.ok(event.timestamp);
+      // Handler result is unaffected
+      assert.deepStrictEqual(result, { ok: true, args: ['Test phase', 'extra'], projectDir: '/proj' });
+    });
+
+    test('CASE 7: fire-and-forget — eventStream throws, handler still returns result', async () => {
+      const eventStream = { emitEvent: () => { throw new Error('emit failed'); } };
+      const wrapped = wrapMutation(async () => ({ ok: true }), 'phase.add', eventStream, 's');
+      const result = await wrapped([], '/proj');
+      assert.deepStrictEqual(result, { ok: true });
+    });
+
+    test('CASE 8: null eventStream — MVP production no-op', async () => {
+      const wrapped = wrapMutation(async () => ({ ok: true }), 'phase.add', null, 's');
+      const result = await wrapped([], '/proj');
+      assert.deepStrictEqual(result, { ok: true });
+    });
     ```
 
-    If upstream's `progress` is not a mutation (it's read-only and won't be wrapped), pick a real upstream mutation like `phase.add` and run it on a tmp project (or short-circuit by spying on `createRegistry`'s wrap path internals — verify per RESEARCH.md A2 assumption).
+    **CRITICAL (W2 fix):** the spy-based test does NOT call upstream's `createRegistry`, does NOT invoke real upstream handlers, and does NOT touch the filesystem. The Pitfall 2 mitigation is verified by asserting the captured event matches the documented shape — that's sufficient parity proof.
 
     **Threat note:** wrap-mutation is a pure transform — no untrusted input crosses a security boundary here.
   </action>
@@ -348,17 +378,18 @@ bd CLI commands available to handlers:
     - `grep -c 'export function buildMutationEvent' bin/wrap-mutation.mjs` returns at least 1.
     - `grep -c "cmd.startsWith" bin/wrap-mutation.mjs` returns at least 7 (the 7 prefix branches).
     - `grep -c 'GSDEventType' bin/wrap-mutation.mjs` returns at least 5 (import + 4+ usages).
-    - `grep -c 'fire-and-forget\|catch' bin/wrap-mutation.mjs` returns at least 1 (try/catch around emit).
-    - `node --test tests/shadow-tests/wrap-mutation.test.mjs` exits 0; >= 7 tests pass.
+    - `grep -c 'eventStream?\.emitEvent\|catch' bin/wrap-mutation.mjs` returns at least 1 (try/catch around emit; MVP null-safe chain).
+    - `grep -c 'eventStream = null\|eventStream=null\|MVP\|no-op' bin/gsd-sdk-shadow.mjs` returns at least 1 (W3 — production wires eventStream=null; comment marker).
+    - `node --test tests/shadow-tests/wrap-mutation.test.mjs` exits 0; >= 8 tests pass (Tests 1-8).
   </acceptance_criteria>
   <verify>
     <automated>node --test tests/shadow-tests/wrap-mutation.test.mjs</automated>
   </verify>
-  <done>wrap-mutation.mjs exports wrapMutation + buildMutationEvent; 7 prefix branches reproduce upstream; snapshot test PASSES against upstream wrap-pass.</done>
+  <done>wrap-mutation.mjs exports wrapMutation + buildMutationEvent; 7 prefix branches reproduce upstream; spy-based snapshot test PASSES (W2 fix — no upstream invocation, no FS side effects). MVP wrap-pass is a verified no-op (W3 fix).</done>
 </task>
 
 <task type="auto" tdd="true">
-  <name>Task 3 (Wave 2): Implement bin/gsd-sdk-shadow.mjs with all 13 BEADS_OVERRIDES + argv routing test</name>
+  <name>Task 3 (Wave 2): Implement bin/gsd-sdk-shadow.mjs (single file per D-02) with all 13 BEADS_OVERRIDES + argv routing test</name>
   <files>
     bin/gsd-sdk-shadow.mjs,
     tests/shadow-tests/argv-routing.test.mjs
@@ -369,6 +400,7 @@ bd CLI commands available to handlers:
     - .planning/phases/02-build-the-layer/02-RESEARCH.md (Pitfall 4 — --project-dir argv position; Pitfall 5 — bd subprocess timing)
     - bin/wrap-mutation.mjs (just-built helper to import)
     - .claude/skills/spike-findings-gsd-beads/references/beads-modeling.md (parent-child link semantics, label conventions)
+    - .planning/phases/02-build-the-layer/02-CONTEXT.md (D-02 — single-file mandate; D-09 — wrapMutation wiring)
   </read_first>
   <behavior>
     - Test 1 (DOTTED): `query phase.add "Phase 1"` on beads project → handler creates bead with `gsd:phase` label + returns `{data:{phase_id, title:'Phase 1', status:'added', backend:'beads'}}`.
@@ -382,13 +414,15 @@ bd CLI commands available to handlers:
     - Test 9 (REQ-02 PASSTHROUGH): when shadow falls through, argv passed to upstream is identical to input argv (no mutation/injection).
   </behavior>
   <action>
-    **Step A: Implement `bin/gsd-sdk-shadow.mjs`.** Build on POC + PATTERNS.md Phase 2 deltas. **Node ESM** (`.mjs` extension; first line `#!/usr/bin/env node`).
+    **Step A: Implement `bin/gsd-sdk-shadow.mjs` as a SINGLE file (D-02 — B3 fix).** Build on POC + PATTERNS.md Phase 2 deltas. **Node ESM** (`.mjs` extension; first line `#!/usr/bin/env node`). All 13 handlers in this one file — they share argv routing, spawnUpstream, dynamic-import, and BEADS_OVERRIDES scaffolding.
 
     Structure:
     ```javascript
     #!/usr/bin/env node
     // Y1 (shadow gsd-sdk) — registry-override variant.
     // GSD core unmodified per REQ-02; uses dynamic import of upstream's dist/.
+    // D-02 invariant: all 13 BEADS_OVERRIDES handlers live in this single file.
+    // D-09 / W3 invariant: production eventStream=null → wrapMutation is a no-op (MVP).
 
     import { spawnSync, execSync } from 'node:child_process';
     import { existsSync } from 'node:fs';
@@ -427,7 +461,7 @@ bd CLI commands available to handlers:
     - **todo.complete**: takes `<todo-id>`. `bd close <todo-id>`. Returns `{todo_id, status:'completed', backend:'beads'}`.
     - **milestone.complete**: takes `<milestone-id>`. `bd label remove <milestone-id> active` + `bd label add <milestone-id> completed`. Returns `{milestone_id, status:'completed', backend:'beads'}`.
 
-    **BEADS_OVERRIDES table** must export EXACTLY 13 entries:
+    **BEADS_OVERRIDES table** must export EXACTLY 13 entries from this file (D-02):
     ```javascript
     export const BEADS_OVERRIDES = {
       'phase.add': beadsPhaseAdd,
@@ -486,7 +520,8 @@ bd CLI commands available to handlers:
 
     // sessionId: best-effort from env or random
     const sessionId = process.env.GSD_SESSION_ID ?? `shadow-${process.pid}-${Date.now()}`;
-    const eventStream = null; // No dashboard consumer in MVP; wrap-pass is fire-and-forget.
+    // MVP: eventStream=null → wrapMutation is a no-op (W3 invariant; D-09 forward-compat preserved).
+    const eventStream = null;
 
     const registry = queryModule.createRegistry(eventStream, sessionId);
 
@@ -558,11 +593,14 @@ bd CLI commands available to handlers:
     - `bin/gsd-sdk-shadow.mjs` exists and is executable.
     - First line `#!/usr/bin/env node`.
     - `node --check bin/gsd-sdk-shadow.mjs` exits 0.
+    - **D-02 single-file invariant (B3 fix):** `grep -c '^export const BEADS_OVERRIDES' bin/gsd-sdk-shadow.mjs` returns 1 (exactly one BEADS_OVERRIDES declaration in this single file).
+    - **D-02 single-file invariant (B3 fix):** `wc -l bin/gsd-sdk-shadow.mjs` returns less than 800 (single file holds all 13 handlers + scaffolding without splitting).
     - `grep -c "import { wrapMutation }" bin/gsd-sdk-shadow.mjs` returns at least 1.
     - `grep -c "await import" bin/gsd-sdk-shadow.mjs` returns at least 2 (queryModule + registryModule).
     - `grep -c "spawnSync(UPSTREAM_BIN" bin/gsd-sdk-shadow.mjs` returns at least 1 (passthrough).
     - `grep -c "existsSync.*\\.beads/metadata\\.json" bin/gsd-sdk-shadow.mjs` returns at least 1 (beads detection).
     - `grep -c "BEADS_OVERRIDES" bin/gsd-sdk-shadow.mjs` returns at least 2.
+    - **W3 fix invariant:** `grep -c 'eventStream = null' bin/gsd-sdk-shadow.mjs` returns at least 1 (production wires null → wrap-pass is a no-op in MVP).
     - Number of BEADS_OVERRIDES entries verified by parsing: `node -e "import('./bin/gsd-sdk-shadow.mjs').then(m=>process.exit(Object.keys(m.BEADS_OVERRIDES).length===13?0:1)).catch(e=>{console.error(e);process.exit(2)})"` exits 0.
     - `grep -c 'resolveQueryArgv' bin/gsd-sdk-shadow.mjs` returns at least 1 (T-02-04 — using SDK primitive).
     - `grep -c "execSync.*'bd " bin/gsd-sdk-shadow.mjs` returns at least 6 (multiple handlers call bd CLI).
@@ -571,7 +609,7 @@ bd CLI commands available to handlers:
   <verify>
     <automated>node --test tests/shadow-tests/argv-routing.test.mjs</automated>
   </verify>
-  <done>Shadow binary implements all 13 BEADS_OVERRIDES, argv routing handles all forms incl. --project-dir + --pick, falls through correctly. argv-routing tests PASS.</done>
+  <done>Shadow binary implements all 13 BEADS_OVERRIDES in a single file (D-02 / B3 fix), argv routing handles all forms incl. --project-dir + --pick, falls through correctly. argv-routing tests PASS. MVP wrap-pass no-op verified via eventStream=null invariant (W3 fix).</done>
 </task>
 
 <task type="auto" tdd="true">
@@ -704,24 +742,29 @@ bd CLI commands available to handlers:
 - `node -e "import('./bin/gsd-sdk-shadow.mjs').then(m=>process.exit(Object.keys(m.BEADS_OVERRIDES).length===13?0:1))"` exits 0.
 - `bash tests/run-quick.sh argv-routing && bash tests/run-quick.sh wrap-mutation && bash tests/run-quick.sh handler-phase-add` exit 0 (verifies meta runner routing from Plan 02-02).
 - `grep -rn '~/.claude/get-shit-done' bin/` returns no matches (REQ-02 — we use upstream via dynamic import, never write to its source tree).
+- D-02 invariant: `grep -c '^export const BEADS_OVERRIDES' bin/gsd-sdk-shadow.mjs` returns 1 AND `wc -l bin/gsd-sdk-shadow.mjs` returns less than 800 (B3 fix).
+- W3 invariant: `grep -c 'eventStream = null' bin/gsd-sdk-shadow.mjs` returns at least 1 (production wraps as no-op).
 </verification>
 
 <success_criteria>
-- bin/gsd-sdk-shadow.mjs is a Node ESM binary with 13 BEADS_OVERRIDES handlers, dynamic import of upstream's createRegistry/resolveQueryArgv/extractField, argv routing per Pitfall 4, GSD_BEADS_DEBUG gate.
-- bin/wrap-mutation.mjs reproduces upstream's buildMutationEvent (7 prefix branches) and exports wrapMutation; snapshot test passes.
+- bin/gsd-sdk-shadow.mjs is a Node ESM single file (D-02) with 13 BEADS_OVERRIDES handlers, dynamic import of upstream's createRegistry/resolveQueryArgv/extractField, argv routing per Pitfall 4, GSD_BEADS_DEBUG gate.
+- bin/wrap-mutation.mjs reproduces upstream's buildMutationEvent (7 prefix branches) and exports wrapMutation; spy-based snapshot test passes (W2 fix).
 - 14 shadow tests committed and PASSING (13 handler + argv-routing + wrap-mutation).
 - REQ-01: state-bearing mutations route to bd, beads is the SoT.
 - REQ-02: GSD core unmodified — only dynamic imports of upstream's dist/.
 - REQ-04: 13 mutations covered; passthrough for everything else.
-- D-09 honored: handlers wrapped post-register with GSDEvent emission.
+- D-02 honored: single-file shadow, no per-handler split (B3 fix).
+- D-09 honored: handlers wrapped post-register with GSDEvent emission (forward-compat preserved despite MVP no-op).
 - D-10 honored: buildMutationEvent reproduced (Pitfall 2 mitigation).
+- W3 invariant: production wires `eventStream=null` so wrap-pass is a verified no-op in MVP.
 </success_criteria>
 
 <output>
 After completion, create `.planning/phases/02-build-the-layer/02-03-SUMMARY.md` documenting:
-- The shadow binary contract (13 overrides, argv routing rules, env vars)
-- wrap-mutation.mjs contract (7 prefix branches, fire-and-forget semantics)
+- The shadow binary contract (13 overrides, argv routing rules, env vars) — single file per D-02
+- wrap-mutation.mjs contract (7 prefix branches, fire-and-forget semantics, MVP no-op via null eventStream)
 - Per-handler timing budgets (Pitfall 5 — flag any handler exceeding 500ms)
 - The cross-plan invariant: every BEADS_OVERRIDES entry has a matching test file
 - Threat mitigations T-02-04, T-02-05
+- B3, W2, W3 invariants verified by grep gates and spy-based snapshot test
 </output>
