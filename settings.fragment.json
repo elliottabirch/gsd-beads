@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block-state-md.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gsd-sdk *)",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block-gsd-sdk-mutation.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(bd *)",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bd-sync.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
