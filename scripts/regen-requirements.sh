@@ -101,8 +101,12 @@ if [ -n "$versions" ]; then
 
     if [ -n "$categories" ]; then
       for cat in $categories; do
-        # Capitalize category slug for header
-        cat_header=$(printf '%s' "$cat" | sed 's/^./\U&/; s/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2)); print}')
+        # Capitalize category slug for header (Gap 2 fix, REQ-06 portability):
+        # macOS BSD sed does not support the GNU uppercase escape — drop
+        # sed entirely and rely on POSIX-mandated tr+awk for Title-Case.
+        cat_header=$(printf '%s' "$cat" \
+          | tr '-' ' ' \
+          | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2)); print}')
 
         printf '### %s\n\n' "$cat_header" >> "$tmp"
 
