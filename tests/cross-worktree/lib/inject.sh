@@ -46,9 +46,16 @@ inject_concurrent_regen() {
 
   # Background snapshot capture loop (every 0.1s).
   # Records signal in a file we wait on at the end.
-  ( while [ ! -f "$snap_dir/.stop" ]; do
+  # Portability (WR-01 fix): use a monotonic counter rather than `date +%s%N`.
+  # `%N` is GNU coreutils-only; on macOS BSD `date` it is emitted literally,
+  # causing every snapshot in the same second to collide on the same filename
+  # and silently overwrite. A zero-padded counter + epoch suffix is strictly
+  # portable and guarantees a unique filename per snapshot.
+  ( snap_n=0
+    while [ ! -f "$snap_dir/.stop" ]; do
       if [ -f "$roadmap" ]; then
-        cp "$roadmap" "$snap_dir/roadmap-snap-$(date +%s%N).md" 2>/dev/null || true
+        cp "$roadmap" "$(printf '%s/roadmap-snap-%06d-%s.md' "$snap_dir" "$snap_n" "$(date +%s)")" 2>/dev/null || true
+        snap_n=$((snap_n + 1))
       fi
       sleep 0.1
     done
