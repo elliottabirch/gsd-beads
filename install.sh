@@ -16,6 +16,7 @@ command -v bd >/dev/null 2>&1 || { echo "ERROR: bd not installed"; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "ERROR: jq not installed"; exit 1; }
 command -v node >/dev/null 2>&1 || { echo "ERROR: node not installed"; exit 1; }
 command -v git >/dev/null 2>&1 || { echo "ERROR: git not installed"; exit 1; }
+command -v flock >/dev/null 2>&1 || { echo "ERROR: flock not installed (macOS: brew install flock)" >&2; exit 1; }
 node -e 'process.exit(parseInt(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' \
   || { echo "ERROR: node >=22 required (have $(node --version))"; exit 1; }
 
