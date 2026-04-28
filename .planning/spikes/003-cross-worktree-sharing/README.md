@@ -140,6 +140,61 @@ Available but requires running the dolt SQL server. Did not init
 fully — for the single-developer MVP audience, embedded + BEADS_DIR
 suffices. Documented as escape hatch.
 
+**Iteration 6 — re-examined the stealth assumption (user push-back).**
+The user asked: "why are we running it in stealth?" I had defaulted to
+it from spike 002 without sufficient reasoning. Investigation revealed
+that beads' canonical design is git-tracked, with a sophisticated
+`.beads/.gitignore` that splits the directory:
+
+| Tracked in git | Ignored |
+|---|---|
+| `issues.jsonl` (workflow state SoT, auto-staged after every write) | `embeddeddolt/` (binary cache, rebuildable from JSONL) |
+| `config.yaml`, `metadata.json`, `hooks/`, `.gitignore` | Lock files, runtime, daemon, federation creds, ephemeral |
+
+Stealth hides ALL of this — losing git audit history, multi-machine
+sync, and `bd init --from-jsonl` clone bootstrap.
+
+Tested 4 architectural shapes:
+
+| | Workflow state location | Cross-worktree | Cross-machine | Git history |
+|---|---|---|---|---|
+| A: Stealth + external BEADS_DIR (original choice) | External `~/code/.../shared/.beads/` | Immediate | ❌ Manual rsync only | ❌ |
+| B: Non-stealth, no BEADS_DIR (beads-canonical) | `<src>/.beads/`, JSONL committed per branch | ❌ Branched | ✅ git push/pull | ✅ |
+| C: Non-stealth + BEADS_DIR=`<src>/.beads/` | `<src>/.beads/` shared via override | Immediate | ✅ git push/pull | ✅ |
+| D: Stealth + tracked snapshot copy | External + tracked snapshot path | Immediate | ✅ via snapshot | ✅ |
+
+User chose **C**. Verified empirically:
+- Source repo bd-init'd non-stealth → `.beads/` committed
+- Worktree-A creates issue with `BEADS_DIR=<src>/.beads` → source repo's
+  `issues.jsonl` updates → bd auto-stages it (export.git-add default)
+- Closing an issue from worktree produces a clean diff in source:
+  `-"status":"open"` → `+"status":"closed","closed_at":...,"close_reason":"Closed"`
+- Every workflow change becomes a git-trackable line. `git log -p .beads/issues.jsonl`
+  is the workflow audit log.
+
+**Iteration 7 — `git worktree add` automation via post-checkout hook.**
+Empirically confirmed `git worktree add <path>` fires `post-checkout`
+in the new worktree with `PWD=<new-wt>`, `flag=1` (branch checkout),
+`old=0000...`. Built `worktree-post-checkout.sh` — a sentinel-marked
+shim that:
+
+1. Resolves source repo's `.beads/` via `git rev-parse --git-common-dir`
+2. Persists discovery via `git config --worktree gsd-beads.dir <path>`
+3. Marks via `<gitdir>/info/.gsd-beads-configured` (idempotent)
+
+Designed to be appended to `.beads/hooks/post-checkout` (bd's chain)
+beside bd's own integration block. End-to-end test: created worktree,
+hook fired, config persisted, wrapper-style `BEADS_DIR=$(git config gsd-beads.dir) bd ...`
+worked, source repo saw the diff. Re-checkout idempotent.
+
+**One small loose end:** wrapper users still need a way to load
+`gsd-beads.dir` into the BEADS_DIR env var on cd into a worktree. Three
+clean options for Phase 2: (a) a `bd` shell function in the user's
+`.zshrc` that reads `git config gsd-beads.dir` before invoking bd; (b)
+a project-tracked `.envrc` for direnv users; (c) gsd-beads' own bd-sync.sh
+sets it before invoking bd internally. Pick whichever (or all three) at
+Phase 2 design time.
+
 ## Results
 
 **Verdict: VALIDATED ✓**
@@ -173,11 +228,16 @@ cascade-loop in worktree-A picks them up and closes the epic."
   document the existence of `--shared-server` as a relief valve. (Filed
   as a Phase 2+ optimization opportunity, not a blocker.)
 
-- **Stealth mode is per-worktree, not shared.** Each worktree's
-  `.git/info/exclude` was configured independently when `bd init` was
-  run. If a user adds a third worktree later, they'd need to re-run
-  `bd init --setup-exclude` (or `bd init --reinit-local`) in the new
-  worktree to keep beads files hidden. Filed as a Requirement.
+- **~~Stealth is per-worktree, must be re-run~~ — superseded by Iteration 6 below.**
+  After re-examining `--stealth` (prompted by the user asking "why are we
+  running it in stealth?"), we discovered beads is explicitly designed
+  to be git-tracked: `.beads/issues.jsonl` is the workflow-state SoT,
+  the binary `embeddeddolt/` is gitignored. Stealth defeats this design.
+  The architecture pivoted to **Approach C: source-repo's `.beads/` is
+  the canonical committed store; worktrees point at it via
+  `BEADS_DIR=<source-repo>/.beads`**. The auto-setup hook persists this
+  via `git config --worktree gsd-beads.dir`. See `worktree-post-checkout.sh`
+  and Iteration 6 below.
 
 - **Issue prefix is shared across worktrees.** All beads in this spike
   used the `wttest-` prefix configured at init time. Worktree-B never
@@ -199,8 +259,13 @@ cascade-loop in worktree-A picks them up and closes the epic."
 
 ## Files
 
-- This README (no scripts written — the spike is a sequence of shell
-  commands documented in the Investigation Trail)
-- The shared bead store lives at `~/code/gsd-beads-wt-shared/.beads/`
-  (not committed; see `sandbox-link.md` in spike 002 for the rationale
-  on keeping bd sandboxes out of the project tree)
+- `worktree-post-checkout.sh` — sentinel-marked shim that auto-configures
+  new worktrees on `git worktree add`. Append to `.beads/hooks/post-checkout`
+  via gsd-beads' install.
+- `snapshot-final.json` — final state from the original BEADS_DIR-external
+  test (before the iteration-6 reshape). Kept for the concurrency findings.
+- `list-sample.txt` — sample `bd list` output from same.
+
+The original BEADS_DIR-external test sandbox lives at
+`~/code/gsd-beads-wt-shared/.beads/` (the iteration-6 approach-C test
+lived briefly at `/tmp/c3-final/` to avoid polluting either).
