@@ -47,6 +47,32 @@ run_bd_payload() {
   printf '%s' "$payload" | "$SYNC_HOOK" 2>/dev/null || true
 }
 
+# ---------- helper: run a Bash PostToolUse payload, propagating exit ----------
+# WR-03 fix: run_bd_payload swallows the hook's exit via `|| true`, so any
+# `rc=$?` assertion against it is a tautology. Use this strict variant when
+# the test needs to observe the hook's actual exit code (e.g. CASE 18's
+# fail-soft contract: the hook must return 0 even when cascade exits 1).
+run_bd_payload_strict() {
+  local cmd="$1"
+  local payload
+  payload=$(jq -n \
+    --arg cmd "$cmd" \
+    '{
+      session_id: "test-runner",
+      transcript_path: "/tmp/x.jsonl",
+      cwd: "/tmp",
+      permission_mode: "default",
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_input: { command: $cmd, description: "test" },
+      tool_response: { stdout: "", stderr: "", interrupted: false },
+      tool_use_id: "toolu_test",
+      duration_ms: 1
+    }')
+  printf '%s' "$payload" | "$SYNC_HOOK" 2>/dev/null
+  return $?
+}
+
 # ---------- helper: build stub scripts in tmpdir ----------
 make_stubs() {
   local tmpdir="$1"
@@ -216,7 +242,11 @@ STUB
   export REGEN_ROADMAP_MARKER="$marker_rr"
   export REGEN_REQUIREMENTS_MARKER="$marker_rreq"
   export SCRIPTS="$tmpdir"
-  run_bd_payload "$command"
+  # WR-03 fix: use the strict variant so rc actually reflects the hook's
+  # exit (not the wrapper's `|| true`). The fail-soft contract requires
+  # bd-sync.sh to absorb cascade-loop's exit 1 and still return 0.
+  # Safe under `set -uo pipefail` (no -e) — a non-zero rc does not abort.
+  run_bd_payload_strict "$command"
   rc=$?
   unset REGEN_ROADMAP_MARKER REGEN_REQUIREMENTS_MARKER SCRIPTS
   local rr_fired="no"; [ -f "$marker_rr" ] && rr_fired="yes"
