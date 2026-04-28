@@ -1,18 +1,21 @@
 # Spike Conventions
 
-Patterns and stack choices established across the 11 spikes in this
+Patterns and stack choices established across the 13 spikes in this
 session. New spikes follow these unless the question requires otherwise.
 
 ## Stack
 
-- **Bash + jq + bd CLI.** Spikes are shell-driven empirical tests; jq
-  parses structured output; bd is the system under test.
+- **Bash + jq + bd CLI** for the hook scripts and most spikes —
+  shell-driven empirical tests.
+- **Node.js (ESM) for the shadow binary** (Spike 013). When the spike
+  needs to import upstream package internals, ESM + dynamic `import()`
+  is the right tool. Pattern: import building blocks from
+  `<pkg>/dist/...`, never modify the package.
 - **HTML viewer for visual results** when the spike has multi-case
-  test output the user should be able to scan visually (Spike 001's
-  `view.html` is the template — dark-mode, monospace, results.json
-  consumer).
-- **No package managers, no build tools, no Docker.** Per the spike
-  workflow's "use whatever gets to a runnable result fastest" rule.
+  test output (Spike 001's `view.html` is the template — dark-mode,
+  monospace, results.json consumer).
+- **No build tools, no Docker.** Per the spike workflow's "use whatever
+  gets to a runnable result fastest" rule.
 
 ## Structure
 
@@ -73,6 +76,23 @@ follows the same pattern: `# --- BEGIN GSD-BEADS WORKTREE INIT v1 ---`
 in `worktree-post-checkout.sh`. Multiple sentinel-marked blocks coexist
 cleanly in one file; install/uninstall scripts manage their own block
 without disturbing others.
+
+### Architecture pivots driven by user pushback
+
+Three of the biggest design decisions came from user pushback during
+review (NOT from initial spike intent):
+
+| Push | Original assumption | Corrected design |
+|---|---|---|
+| Spike 003 | Use `bd init --stealth` | Use non-stealth — beads is designed to be git-tracked |
+| Spike 002 review | "GSD-specific CLAUDE.md addendum" | bd memories under `gsd-beads:` namespace |
+| Spike 013 | 13 substitute skills + hook | Y1 shadow binary — substitutes become optional |
+
+Lesson: when an architecture decision feels like it's fighting the
+upstream tool, it usually IS. Spike outputs reaching VALIDATED
+shouldn't be the end of design conversation — review-pass questions
+about WHY a finding looks the way it does have surfaced the most
+valuable course corrections.
 
 ### bd memories over CLAUDE.md for persistent instructions
 

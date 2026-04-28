@@ -1,0 +1,30 @@
+{
+  "_comment": "Hook fragment for gsd-beads. Merge into ~/.claude/settings.json at install time. The 'if' field uses Claude Code permission rule syntax to filter on tool args; matcher filters on tool name only.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block-state-md.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(bd *)",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bd-sync.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
