@@ -22,17 +22,20 @@ must_haves:
     - "After running `gsd-update` on the upstream package, the shadow imports still resolve (REQ-02 — assumption A2)"
     - "`bd ready` works as-is in a beads-managed project — gsd-beads-vocabulary memory mentions it (REQ-08)"
     - "Cleanup-on-failure: trap EXIT removes all /tmp fixture dirs (T-02-10)"
+    - "B1: REQ-05 acceptance is no-conflict-no-corruption (last-writer-wins per Pitfall 8 / Spike 005); recovery of overwritten close_reason is OUT OF SCOPE for MVP. concurrent-merge.test.sh asserts (a) both writers' bd close commands return non-empty IDs (no exception thrown / both transactions committed), and (b) `bd show <id> --json` returns state=closed with close_reason matching ONE of the two writer values (not null, not corrupted)."
+    - "Per D-07 (CONTEXT.md), `bd prime` must surface gsd-beads:vocabulary content at session-start (verified by smoke test — B2 fix)."
+    - "Per W8: CASE 5 of full-install.smoke.sh invokes `node \"$REPO_ROOT/bin/gsd-sdk-shadow.mjs\" query progress --project-dir <fixture>` to bypass PATH lookup and explicitly exercise the shadow (Volta machines may resolve `gsd-sdk` to upstream not the shadow)."
   artifacts:
     - path: "tests/e2e/full-install.smoke.sh"
       provides: "End-to-end happy path: fresh project + install + hierarchy + cascade + regen + parser-compat"
     - path: "tests/e2e/bd-sync-latency.test.sh"
       provides: "50-bead perf gate; <5s budget for cascade+regen"
     - path: "tests/e2e/concurrent-merge.test.sh"
-      provides: "REQ-05 — 2 worktrees writing same bead ID, merge without conflict"
+      provides: "REQ-05 — 2 worktrees writing same bead ID, merge without conflict (B1 fix — interpretation per Pitfall 8)"
     - path: "tests/e2e/post-gsd-update.smoke.sh"
       provides: "REQ-02 — npm update upstream then verify shadow imports still resolve"
     - path: "tests/e2e/bd-ready.smoke.sh"
-      provides: "REQ-08 — `bd ready` works in beads-managed project"
+      provides: "REQ-08 — `bd ready` works in beads-managed project; D-07 — `bd prime` surfaces gsd-beads:vocabulary (B2 fix)"
     - path: "tests/e2e/fixtures/scale-50-bead.sh"
       provides: "Builds 50-bead hierarchy for the perf test"
   key_links:
@@ -54,6 +57,12 @@ must_haves:
 Build the cross-cutting end-to-end suite that exercises the full layer on a fresh fixture project. Each test isolates in `/tmp/gsd-beads-e2e-${RANDOM}` with `trap EXIT` cleanup (T-02-10).
 
 Plans 02-01 through 02-05 must all be complete (Wave 4 — final integration). This is the phase gate before `/gsd-verify-work`.
+
+**B1 REQ-05 interpretation:** REQ-05 ("conflict-free concurrent merge") is interpreted strictly per Pitfall 8 / Spike 005: bd's Dolt-backed concurrent writes are last-writer-wins on the same field. Acceptance is (a) no exception thrown by either writer, (b) database not corrupted (`bd list` post-merge succeeds), (c) bead final state is `closed` with `close_reason` set to ONE of the two writer values. Recovering the overwritten `close_reason` is out of scope for MVP.
+
+**B2 D-07 verification:** D-07 mandates `bd prime` surfaces the `gsd-beads:vocabulary` memory at every session-start. This plan adds a CASE to `bd-ready.smoke.sh` that invokes `bd prime` in the fixture and greps the output for the literal string from the vocabulary memory.
+
+**W8 PATH-bypass:** on Volta-trap machines `command -v gsd-sdk` may resolve to upstream, not the shadow. Tests exercising the shadow's overrides invoke `node "$REPO_ROOT/bin/gsd-sdk-shadow.mjs"` directly to bypass PATH lookup.
 
 Purpose: prove the entire layer works in concert; verify each REQ has a green smoke.
 Output: 5 smoke/perf/integration tests + 1 fixture builder.
@@ -99,7 +108,7 @@ bash "$REPO_ROOT/install.sh"
 ```
 
 <!-- gsd-progress parser invocation -->
-The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invokes it via `gsd-sdk query progress --project-dir <fixture>` (passes through to upstream — read-only) and asserts the output contains a non-trivial Progress block.
+The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invokes the SHADOW directly via `node "$REPO_ROOT/bin/gsd-sdk-shadow.mjs" query progress --project-dir <fixture>` (W8 fix — bypass PATH lookup) and asserts the output contains a non-trivial Progress block.
 </interfaces>
 </context>
 
@@ -134,7 +143,7 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
     - CASE 2: build 3-level hierarchy via shadow's phase.add + bd link
     - CASE 3: close all 6 leaf tasks → cascade-loop closes 2 phases + 1 requirement (3 epic closures)
     - CASE 4: regen-roadmap.sh produces .planning/ROADMAP.md with `## Progress` table
-    - CASE 5: gsd-progress parses regenerated ROADMAP.md without error (`gsd-sdk query progress` passes through, returns non-empty)
+    - CASE 5 (W8 fix): `node "$REPO_ROOT/bin/gsd-sdk-shadow.mjs" query progress --project-dir "$fixture"` returns non-empty parser-compat output (bypasses PATH lookup so Volta-trap machines exercise the shadow explicitly)
     - CASE 6: regen-requirements.sh produces .planning/REQUIREMENTS.md with version + traceability sections
     - CASE 7: idempotent regen — running regen twice produces zero diff
     - cleanup: `trap "rm -rf $fixture" EXIT`
@@ -144,22 +153,23 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
     - CASE 2: invoke bd-sync.sh on a state-changing payload, measure wall-clock
     - CASE 3: assert wall-clock < 5s (Pitfall 3 budget); print actual ms
 
-    **`tests/e2e/concurrent-merge.test.sh`** cases:
+    **`tests/e2e/concurrent-merge.test.sh`** cases (B1 fix — REQ-05 interpretation per Pitfall 8):
     - CASE 1: build fixture, add second worktree via `git worktree add`
-    - CASE 2: spawn 2 parallel processes that each `bd update <bead> --status closed --reason wt-X` on the same bead
-    - CASE 3: wait for both, assert both exited 0, assert final bead is closed (REQ-05 conflict-free)
-    - CASE 4: assert no .beads/embeddeddolt corruption (run `bd list` post-merge, expect 0 errors)
+    - CASE 2: spawn 2 parallel processes that each `bd close <bead> --reason wt-X` on the same bead. **Both invocations return a non-empty bead ID and exit 0** (proves no exception thrown / both transactions committed).
+    - CASE 3: wait for both, **`bd show <bead> --json` returns state=closed AND close_reason is one of {wt-source, wt-secondary} (not null, not corrupted JSON)**. Last-writer-wins is acceptable per Pitfall 8.
+    - CASE 4: assert no .beads/embeddeddolt corruption (run `bd list --json` post-merge, jq-parses successfully).
 
     **`tests/e2e/post-gsd-update.smoke.sh`** cases:
     - CASE 1: capture current upstream version via `node -e "console.log(require('get-shit-done-cc/package.json').version)"`
     - CASE 2: simulate gsd-update by `volta install get-shit-done-cc@latest` (or skip if version already latest; print SKIPPED)
-    - CASE 3: run shadow with `gsd-sdk query phase` (read-only) on fixture; assert exit 0 (REQ-02 — shadow's dynamic import still resolves after upstream upgrade)
-    - CASE 4: run shadow with `gsd-sdk query phase.add "Test phase" --project-dir <fixture>`; assert exit 0 + JSON has `backend:'beads'`
+    - CASE 3: run shadow with `node "$REPO_ROOT/bin/gsd-sdk-shadow.mjs" query phase` (read-only) on fixture; assert exit 0 (REQ-02 — shadow's dynamic import still resolves after upstream upgrade)
+    - CASE 4: run shadow with `node "$REPO_ROOT/bin/gsd-sdk-shadow.mjs" query phase.add "Test phase" --project-dir <fixture>`; assert exit 0 + JSON has `backend:'beads'`
 
-    **`tests/e2e/bd-ready.smoke.sh`** cases:
+    **`tests/e2e/bd-ready.smoke.sh`** cases (B2 fix — D-07 verification added):
     - CASE 1: build 3-level fixture with 1 ready task (no `blocks` deps)
     - CASE 2: run `bd ready`, assert output mentions the ready task ID
     - CASE 3: run `bd memories gsd-beads:vocabulary`, assert output mentions string `bd ready`
+    - CASE 4 (B2 fix — D-07 verification): run `bd prime` in the fixture, assert stdout/stderr contains a literal string from the vocabulary memory (e.g., `gsd-beads:vocabulary` key name OR the literal `Upstream` keyword from the vocabulary memory). Validates D-07: agents see vocabulary at session start via `bd prime`.
 
     **`tests/e2e/fixtures/scale-50-bead.sh`** — fixture builder (called from bd-sync-latency.test.sh):
     ```bash
@@ -180,7 +190,7 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
     - `grep -c '^# CASE' tests/e2e/bd-sync-latency.test.sh` returns at least 3.
     - `grep -c '^# CASE' tests/e2e/concurrent-merge.test.sh` returns at least 4.
     - `grep -c '^# CASE' tests/e2e/post-gsd-update.smoke.sh` returns at least 4.
-    - `grep -c '^# CASE' tests/e2e/bd-ready.smoke.sh` returns at least 3.
+    - `grep -c '^# CASE' tests/e2e/bd-ready.smoke.sh` returns at least 4 (B2 fix — CASE 4 added for D-07).
     - `grep -c 'trap.*rm -rf' tests/e2e/full-install.smoke.sh` returns at least 1 (T-02-10 cleanup).
   </acceptance_criteria>
   <verify>
@@ -200,10 +210,12 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
     - install.sh, hooks/*, scripts/*, bin/* (the entire installed surface — these tests exercise them all)
     - tests/fixtures/bd-helpers/3-level-hierarchy.sh (reuse for hierarchy building)
     - .planning/phases/02-build-the-layer/02-PATTERNS.md (E2E flow lines 905-916; perf budget Pitfall 3)
+    - .planning/phases/02-build-the-layer/02-CONTEXT.md (D-07 — `bd prime` surfaces gsd-beads:vocabulary)
+    - install/memories/vocabulary.md (the literal text the bd prime smoke test will grep for — B2 fix)
   </read_first>
   <behavior>
-    - full-install.smoke: 7 cases as listed above; total runtime <60s.
-    - bd-ready.smoke: 3 cases; total runtime <10s.
+    - full-install.smoke: 7 cases as listed above; total runtime <60s. CASE 5 explicitly invokes the shadow via `node` to bypass PATH (W8 fix).
+    - bd-ready.smoke: 4 cases (B2 fix — D-07 bd prime verification added); total runtime <10s.
     - post-gsd-update.smoke: 4 cases; total runtime <60s (or skipped if version already latest).
   </behavior>
   <action>
@@ -267,14 +279,12 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
     [ -f .planning/ROADMAP.md ] && grep -q '## Progress' .planning/ROADMAP.md
     case_run "regen-roadmap produces ROADMAP.md with ## Progress" $?
 
-    # CASE 5: gsd-progress parses regenerated ROADMAP.md
-    if command -v gsd-sdk >/dev/null; then
-      out=$(gsd-sdk query progress --project-dir "$fixture" 2>&1) || rc=$?
-      [ -n "$out" ]
-      case_run "gsd-sdk query progress returns non-empty (parser-compat)" $?
-    else
-      case_run "gsd-sdk query progress (SKIPPED — gsd-sdk not on PATH)" 0
-    fi
+    # CASE 5 (W8 fix): exercise the SHADOW via direct node invocation (bypass PATH)
+    # On Volta machines, `gsd-sdk` on PATH may resolve to upstream, not the shadow.
+    # Direct node invocation guarantees the shadow's argv routing is exercised.
+    out=$(node "$REPO_ROOT/bin/gsd-sdk-shadow.mjs" query progress --project-dir "$fixture" 2>&1) || rc=$?
+    [ -n "$out" ]
+    case_run "shadow query progress (direct node invocation — bypasses PATH per W8)" $?
 
     # CASE 6: regen-requirements
     bash "$REPO_ROOT/scripts/regen-requirements.sh"
@@ -292,7 +302,7 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
     [ "$fail" -eq 0 ]
     ```
 
-    **Step B: `tests/e2e/bd-ready.smoke.sh`.**
+    **Step B: `tests/e2e/bd-ready.smoke.sh`** (B2 fix — adds CASE 4 for D-07):
     ```bash
     #!/usr/bin/env bash
     set -uo pipefail
@@ -310,19 +320,32 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
 
     # CASE 2: bd ready returns at least one task
     out=$(bd ready 2>&1)
-    [ -n "$out" ] && [ "$pass" = "$pass" ] && pass=$((pass+1))
-    [ -n "$out" ] || fail=$((fail+1))
+    if [ -n "$out" ]; then pass=$((pass+1)); else fail=$((fail+1)); fi
     echo "[CASE 2] bd ready output: $out"
 
     # CASE 3: gsd-beads:vocabulary memory mentions bd ready
     voc=$(bd memories gsd-beads:vocabulary 2>&1 || true)
     if echo "$voc" | grep -q 'bd ready'; then pass=$((pass+1)); else fail=$((fail+1)); fi
 
+    # CASE 4 (B2 fix — D-07 verification): bd prime surfaces gsd-beads:vocabulary
+    # D-07 mandates: agents see vocabulary memory at session start via bd prime.
+    # We grep for either the memory key name itself or a literal string from the vocabulary text
+    # (e.g., "Upstream" — present in vocabulary.md per W7 fix).
+    prime_out=$(bd prime 2>&1 || true)
+    if echo "$prime_out" | grep -qE 'gsd-beads:vocabulary|Upstream `/gsd-\*` commands'; then
+      pass=$((pass+1))
+      echo "[CASE 4] PASS — bd prime surfaces gsd-beads:vocabulary (D-07 verified)"
+    else
+      fail=$((fail+1))
+      echo "[CASE 4] FAIL — bd prime did not surface gsd-beads:vocabulary"
+      echo "[CASE 4] bd prime output (first 500 chars): $(printf '%s' "$prime_out" | head -c 500)"
+    fi
+
     echo "Passed: $pass / $((pass+fail))"
     [ "$fail" -eq 0 ]
     ```
 
-    **Step C: `tests/e2e/post-gsd-update.smoke.sh`.**
+    **Step C: `tests/e2e/post-gsd-update.smoke.sh`** (uses direct shadow invocation per W8 in CASE 3-4):
     ```bash
     #!/usr/bin/env bash
     set -uo pipefail
@@ -345,17 +368,17 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
       pass=$((pass+1))
     fi
 
-    # CASE 3: shadow's read-only passthrough still works
+    # CASE 3: shadow's read-only passthrough still works (W8 — direct node invocation)
     mkdir -p "$fixture" && cd "$fixture"
     git init -q && bd init --non-interactive --skip-agents >/dev/null
-    if "$REPO_ROOT/bin/gsd-sdk-shadow.mjs" query phase --project-dir "$fixture" 2>&1 | head -1 | grep -q '.'; then
+    if node "$REPO_ROOT/bin/gsd-sdk-shadow.mjs" query phase --project-dir "$fixture" 2>&1 | head -1 | grep -q '.'; then
       pass=$((pass+1))
     else
       fail=$((fail+1))
     fi
 
-    # CASE 4: shadow's mutation handler still works
-    out=$("$REPO_ROOT/bin/gsd-sdk-shadow.mjs" query phase.add "Post-update phase" --project-dir "$fixture" 2>&1)
+    # CASE 4: shadow's mutation handler still works (W8 — direct node invocation)
+    out=$(node "$REPO_ROOT/bin/gsd-sdk-shadow.mjs" query phase.add "Post-update phase" --project-dir "$fixture" 2>&1)
     if echo "$out" | jq -e '.data.backend == "beads"' >/dev/null 2>&1; then
       pass=$((pass+1))
     else
@@ -374,32 +397,36 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
     - `grep -c 'trap.*rm -rf.*EXIT' tests/e2e/full-install.smoke.sh` returns at least 1.
     - `grep -c 'trap.*rm -rf.*EXIT' tests/e2e/bd-ready.smoke.sh` returns at least 1.
     - `grep -c 'trap.*rm -rf.*EXIT' tests/e2e/post-gsd-update.smoke.sh` returns at least 1.
-    - `bash tests/e2e/full-install.smoke.sh` exits 0 with `Passed: 7 / 7` (or 6 / 7 if gsd-sdk not on PATH yet — SKIPPED counts as PASS).
-    - `bash tests/e2e/bd-ready.smoke.sh` exits 0 (3/3).
+    - **W8 fix:** `grep -c 'node "\$REPO_ROOT/bin/gsd-sdk-shadow.mjs"' tests/e2e/full-install.smoke.sh` returns at least 1 (CASE 5 invokes shadow directly).
+    - **W8 fix:** `grep -c 'node "\$REPO_ROOT/bin/gsd-sdk-shadow.mjs"' tests/e2e/post-gsd-update.smoke.sh` returns at least 2 (CASE 3 + 4 invoke shadow directly).
+    - **B2 fix:** `grep -c 'bd prime' tests/e2e/bd-ready.smoke.sh` returns at least 1 (D-07 verification).
+    - **B2 fix:** `grep -c '^# CASE 4\|CASE 4' tests/e2e/bd-ready.smoke.sh` returns at least 1.
+    - `bash tests/e2e/full-install.smoke.sh` exits 0 with `Passed: 7 / 7`.
+    - `bash tests/e2e/bd-ready.smoke.sh` exits 0 (4/4 — B2 CASE 4 PASSES).
     - `bash tests/e2e/post-gsd-update.smoke.sh` exits 0 (4/4 — Volta install may print SKIPPED but counts pass).
   </acceptance_criteria>
   <verify>
     <automated>bash tests/e2e/full-install.smoke.sh && bash tests/e2e/bd-ready.smoke.sh && bash tests/e2e/post-gsd-update.smoke.sh</automated>
   </verify>
-  <done>3 e2e smokes PASSING. Full install path verified end-to-end. REQ-01, REQ-02, REQ-04, REQ-06, REQ-07, REQ-08 covered.</done>
+  <done>3 e2e smokes PASSING. Full install path verified end-to-end. REQ-01, REQ-02, REQ-04, REQ-06, REQ-07, REQ-08 covered. W8 PATH-bypass + B2 D-07 verification active.</done>
 </task>
 
 <task type="auto" tdd="true">
-  <name>Task 3 (Wave 4): Implement bd-sync-latency perf gate + concurrent-merge integration</name>
+  <name>Task 3 (Wave 4): Implement bd-sync-latency perf gate + concurrent-merge integration (B1 REQ-05 fidelity fix)</name>
   <files>
     tests/e2e/bd-sync-latency.test.sh,
     tests/e2e/concurrent-merge.test.sh,
     tests/e2e/fixtures/scale-50-bead.sh
   </files>
   <read_first>
-    - .planning/phases/02-build-the-layer/02-RESEARCH.md (Pitfall 3 — 50-bead fixture target, <5s budget; Spike 005 concurrent-merge findings, lines 38-39)
+    - .planning/phases/02-build-the-layer/02-RESEARCH.md (Pitfall 3 — 50-bead fixture target, <5s budget; Spike 005 concurrent-merge findings; Pitfall 8 — last-writer-wins on same-field updates)
     - hooks/bd-sync.sh (the script under test)
     - .claude/skills/spike-findings-gsd-beads/references/beads-modeling.md (concurrent writes safe via Dolt file lock)
     - tests/e2e/full-install.smoke.sh (just-built — reuse fixture pattern)
   </read_first>
   <behavior>
     - bd-sync-latency: perf gate — 50-bead fixture, run bd-sync.sh on a state-change payload, assert <5s.
-    - concurrent-merge: 2 parallel processes update the same bead from different worktrees, both succeed, no corruption.
+    - concurrent-merge (B1 fix — REQ-05 interpretation per Pitfall 8): 2 parallel processes close the same bead from different worktrees. Acceptance: (a) both writers' `bd close` returns non-empty bead-ID stdout (no exception thrown / both transactions committed), (b) `bd show <id> --json` returns state=closed AND close_reason ∈ {wt-source, wt-secondary} (not null, not corrupted JSON), (c) `bd list` post-merge succeeds (no DB corruption).
     - scale-50-bead: builds 1 req → 5 phases × 10 tasks = 56 beads via bd CLI.
   </behavior>
   <action>
@@ -477,7 +504,7 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
     [ "$fail" -eq 0 ]
     ```
 
-    **Step C: `tests/e2e/concurrent-merge.test.sh`.**
+    **Step C: `tests/e2e/concurrent-merge.test.sh` (B1 fix — REQ-05 interpretation per Pitfall 8).**
     ```bash
     #!/usr/bin/env bash
     set -uo pipefail
@@ -496,23 +523,51 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
     git worktree add "$wt" -q
     if [ -d "$wt" ]; then pass=$((pass+1)); else fail=$((fail+1)); fi
 
-    # CASE 2: create a target bead, then 2 parallel processes update it from different cwds
+    # CASE 2 (B1 fix): create a target bead, then 2 parallel processes close it from different cwds.
+    # Acceptance: BOTH writers' bd close stdout must be non-empty (proves transaction committed,
+    # no exception thrown). Last-writer-wins on close_reason is acceptable per Pitfall 8.
     BEAD=$(bd q "concurrent target" -t task -p 1)
-    (cd "$fixture" && bd update "$BEAD" --status closed --reason "wt-source" >/dev/null 2>&1) &
+    out1_file=$(mktemp); out2_file=$(mktemp)
+    rc1_file=$(mktemp); rc2_file=$(mktemp)
+    (cd "$fixture" && bd close "$BEAD" --reason "wt-source" 2>&1 > "$out1_file"; echo $? > "$rc1_file") &
     pid1=$!
-    (cd "$wt" && BEADS_DIR="$fixture/.beads" bd update "$BEAD" --status closed --reason "wt-secondary" >/dev/null 2>&1) &
+    (cd "$wt" && BEADS_DIR="$fixture/.beads" bd close "$BEAD" --reason "wt-secondary" 2>&1 > "$out2_file"; echo $? > "$rc2_file") &
     pid2=$!
-    wait $pid1; rc1=$?
-    wait $pid2; rc2=$?
-    if [ "$rc1" = "0" ] && [ "$rc2" = "0" ]; then pass=$((pass+1)); else fail=$((fail+1)); fi
+    wait $pid1; wait $pid2
+    rc1=$(cat "$rc1_file"); rc2=$(cat "$rc2_file")
+    out1=$(cat "$out1_file"); out2=$(cat "$out2_file")
+    rm -f "$out1_file" "$out2_file" "$rc1_file" "$rc2_file"
+    # Both writers committed (rc=0 AND non-empty bead-ID-bearing stdout)
+    if [ "$rc1" = "0" ] && [ "$rc2" = "0" ] && [ -n "$out1" ] && [ -n "$out2" ]; then
+      pass=$((pass+1))
+      echo "[CASE 2] PASS — both writers committed (rc1=$rc1, rc2=$rc2; outputs non-empty)"
+    else
+      fail=$((fail+1))
+      echo "[CASE 2] FAIL — rc1=$rc1, rc2=$rc2, out1=$out1, out2=$out2"
+    fi
 
-    # CASE 3: final state — bead is closed (last-writer-wins is acceptable per Spike 005 / Pitfall 8)
-    final=$(bd show "$BEAD" --json | jq -r '.[0].status')
-    [ "$final" = "closed" ] && pass=$((pass+1)) || fail=$((fail+1))
-    echo "[CASE 3] final status: $final"
+    # CASE 3 (B1 fix): final state — bead is closed AND close_reason ∈ {wt-source, wt-secondary}.
+    # Last-writer-wins is acceptable per Pitfall 8 / Spike 005; recovering the overwritten value is OUT OF SCOPE for MVP.
+    final_json=$(bd show "$BEAD" --json 2>&1)
+    final_status=$(echo "$final_json" | jq -r '.[0].status' 2>/dev/null)
+    final_reason=$(echo "$final_json" | jq -r '.[0].close_reason // ""' 2>/dev/null)
+    if [ "$final_status" = "closed" ] && \
+       { [ "$final_reason" = "wt-source" ] || [ "$final_reason" = "wt-secondary" ]; }; then
+      pass=$((pass+1))
+      echo "[CASE 3] PASS — status=closed, close_reason=$final_reason (one of two writer values; last-writer-wins per Pitfall 8 acceptable)"
+    else
+      fail=$((fail+1))
+      echo "[CASE 3] FAIL — status=$final_status close_reason=$final_reason (raw json: $final_json)"
+    fi
 
-    # CASE 4: no corruption — `bd list` succeeds
-    if bd list --json >/dev/null 2>&1; then pass=$((pass+1)); else fail=$((fail+1)); fi
+    # CASE 4: no corruption — `bd list --json` parses successfully
+    if bd list --json 2>/dev/null | jq -e 'type == "array"' >/dev/null 2>&1; then
+      pass=$((pass+1))
+      echo "[CASE 4] PASS — bd list --json parses (no DB corruption)"
+    else
+      fail=$((fail+1))
+      echo "[CASE 4] FAIL — bd list output not valid JSON array"
+    fi
 
     echo "Passed: $pass / $((pass+fail))"
     [ "$fail" -eq 0 ]
@@ -524,14 +579,17 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
     - All 3 files updated, executable, syntax-clean.
     - `bash tests/e2e/fixtures/scale-50-bead.sh /tmp/scale-test-$$ 2>&1 | grep -q 'built 56 beads'` returns success after providing a fresh bd init.
     - `bash tests/e2e/bd-sync-latency.test.sh` exits 0 (3/3 cases; <5s budget met).
-    - `bash tests/e2e/concurrent-merge.test.sh` exits 0 (4/4 cases).
+    - `bash tests/e2e/concurrent-merge.test.sh` exits 0 (4/4 cases — B1 fix interpretations honored).
     - `grep -c 'trap.*rm -rf.*EXIT' tests/e2e/concurrent-merge.test.sh` returns at least 1 (T-02-10).
     - `grep -c 'date +%s%N' tests/e2e/bd-sync-latency.test.sh` returns at least 2 (timing measurement).
+    - **B1 fix:** `grep -c 'wt-source\|wt-secondary' tests/e2e/concurrent-merge.test.sh` returns at least 4 (both writer values referenced in CASE 2 + CASE 3 assertions).
+    - **B1 fix:** `grep -c 'close_reason' tests/e2e/concurrent-merge.test.sh` returns at least 1 (CASE 3 verifies close_reason).
+    - **B1 fix:** `grep -c 'Pitfall 8\|last-writer-wins' tests/e2e/concurrent-merge.test.sh` returns at least 1 (interpretation note documented inline).
   </acceptance_criteria>
   <verify>
     <automated>bash tests/e2e/bd-sync-latency.test.sh && bash tests/e2e/concurrent-merge.test.sh</automated>
   </verify>
-  <done>Perf gate (Pitfall 3) green: 50-bead bd-sync <5s. REQ-05 concurrent-merge integration green. T-02-10 cleanup verified.</done>
+  <done>Perf gate (Pitfall 3) green: 50-bead bd-sync <5s. REQ-05 concurrent-merge integration green per Pitfall 8 interpretation (B1 fix — both writers commit, no DB corruption, close_reason is one of the two values). T-02-10 cleanup verified.</done>
 </task>
 
 </tasks>
@@ -549,7 +607,7 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
 | Threat ID | Category | Component | Disposition | Mitigation Plan |
 |-----------|----------|-----------|-------------|-----------------|
 | T-02-10 | Information disclosure / DoS | tests/e2e/*/fixtures in /tmp | mitigate | All e2e tests use `trap "rm -rf '$fixture'" EXIT` so fixtures clean up even on failure. Acceptance: `grep -c 'trap.*rm -rf.*EXIT' tests/e2e/*.sh` returns ≥1 per file. |
-| (Concurrent merge data loss) | Information disclosure | concurrent-merge.test.sh | accept | Per Spike 005 + Pitfall 8: same-field updates are last-writer-wins; tests assert no corruption (bd list succeeds), not that both writers' data persists. |
+| (Concurrent merge data loss) | Information disclosure | concurrent-merge.test.sh | accept | Per Spike 005 + Pitfall 8: same-field updates are last-writer-wins; tests assert no corruption (bd list succeeds), both writers commit (non-empty stdout), and close_reason matches one of two writer values (B1 fix — explicit acceptance criteria). Recovery of overwritten value is out of scope for MVP. |
 </threat_model>
 
 <verification>
@@ -557,22 +615,30 @@ The upstream `gsd-progress` skill reads `.planning/ROADMAP.md`. Smoke test invok
 - Combined runtime <5 minutes (full-install ~60s, bd-ready ~10s, post-gsd-update ~60s, bd-sync-latency ~30s, concurrent-merge ~20s).
 - All trap-EXIT cleanups verified via `grep` acceptance criteria.
 - No /tmp pollution after `bash tests/run-all.sh` completes.
+- B1 invariants: concurrent-merge.test.sh CASE 3 asserts close_reason ∈ {wt-source, wt-secondary} (not null/corrupted).
+- B2 invariant: bd-ready.smoke.sh CASE 4 asserts bd prime surfaces gsd-beads:vocabulary content (D-07 verified).
+- W8 invariant: full-install.smoke.sh CASE 5 + post-gsd-update.smoke.sh CASE 3+4 invoke `node "$REPO_ROOT/bin/gsd-sdk-shadow.mjs"` directly to bypass PATH lookup.
 </verification>
 
 <success_criteria>
 - `bash tests/run-all.sh` exits 0 with full pass tally — every Wave 0 stub now has matching production code, every test green.
 - E2E full-install verifies REQ-01 (regen), REQ-02 (no GSD core mutation), REQ-04 (hooks active), REQ-06 (install idempotent), REQ-07 (narrative untouched), REQ-08 (bd ready works).
 - Performance gate met: 50-bead bd-sync <5s (Pitfall 3 budget).
-- Concurrent merge verified: 2 worktrees, no corruption (REQ-05).
+- Concurrent merge verified per Pitfall 8 / B1 fix: 2 worktrees, both committed, close_reason ∈ {wt-source, wt-secondary}, no corruption (REQ-05).
 - Post-update smoke verified: shadow imports survive `volta install get-shit-done-cc@latest` (REQ-02 / Assumption A2).
+- D-07 verified (B2 fix): bd prime surfaces gsd-beads:vocabulary content at session-start.
+- W8 PATH-bypass active: shadow exercised via direct node invocation in CASE 5 + post-update CASEs.
 - Phase 2 ready for `/gsd-verify-work` gate.
 </success_criteria>
 
 <output>
 After completion, create `.planning/phases/02-build-the-layer/02-06-SUMMARY.md` documenting:
-- E2E pass tally (full-install: 7/7, bd-sync-latency: 3/3, concurrent-merge: 4/4, post-gsd-update: 4/4, bd-ready: 3/3)
+- E2E pass tally (full-install: 7/7, bd-sync-latency: 3/3, concurrent-merge: 4/4 per B1 interpretation, post-gsd-update: 4/4, bd-ready: 4/4 per B2 D-07 verification)
 - Measured bd-sync wall-clock on the 50-bead fixture
 - Any cases that produced SKIPPED (volta install precondition)
 - Confirmation that no /tmp dirs leaked after suite run
 - T-02-10 cleanup invariant verified
+- B1 REQ-05 interpretation honored (Pitfall 8 last-writer-wins acceptable)
+- B2 D-07 bd prime verification PASS
+- W8 PATH-bypass invariants verified by grep gates
 </output>
