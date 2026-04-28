@@ -30,6 +30,10 @@ Updated as spikes progress.
 - **Run `bd hooks install` as part of gsd-beads install.** Adds 5 sentinel-merged git hook shims (pre-commit, post-merge, pre-push, post-checkout, prepare-commit-msg) with 300s timeout + graceful "no bead store" fallback. The `prepare-commit-msg` agent-identity trailer is valuable for forensics on agent-driven commits. (Spike 002)
 - **Seeds map to beads issues with label `gsd:seed`** (deferred status), NOT to `bd remember` memories. `bd remember` is for cross-cutting conventions and gotchas; seeds are forward-looking work items with trigger conditions. (Spike 002)
 - **`bd federation` is orthogonal to cross-worktree (spike 003)** — federation is for peer-to-peer between separate Dolt DBs on different machines; `BEADS_DIR` is for one-developer multi-worktree. Not needed for single-developer MVP. (Spike 002)
+- **Cross-worktree sharing uses `BEADS_DIR=<shared>/.beads` + embedded mode.** No `bd dolt push` between worktrees needed — writes are immediately visible. `--shared-server` mode is documented as escape hatch for heavy concurrency, not required for MVP. (Spike 003)
+- **`bd init --stealth` must be re-run in any newly-added worktree** to configure that worktree's `.git/info/exclude` (stealth state is per-worktree). The actual bead store is shared via `BEADS_DIR`; only the git-exclude config is per-worktree. (Spike 003)
+- **Hash-based ID uniqueness is solid under concurrent load.** 125 beads created across 40 concurrent processes from 2 worktrees: 125 unique IDs, 0 collisions. Embedded Dolt serializes concurrent writes via file lock at ~3.25 writes/sec; correctness is guaranteed even though parallel speedup is not. (Spike 003)
+- **`bd dolt push` is for federation/remote sync, NOT local cross-worktree sync.** Must clarify in gsd-beads CLAUDE.md addendum so agents don't unnecessarily invoke it after every cross-worktree change. (Spike 003)
 - **Tree rendering uses `bd children <id>`, NOT `bd dep tree`.** `dep tree` walks `blocks` deps; `children` walks `parent-child`. Generated ROADMAP.md must source from `bd children` or direct JSON queries. (Spike 002)
 - **`bd prime` is beads' canonical operational SSOT.** It outputs ~80 lines of dynamic workflow context. gsd-beads' CLAUDE.md addendum points at it rather than duplicating its content. (Spike 002)
 
@@ -39,6 +43,6 @@ Updated as spikes progress.
 |---|------|------|-----------|---------|------|
 | 001 | hook-semantics | standard | `PreToolUse(Edit, ROADMAP.md)` blocks with structured error; `PostToolUse(Bash, "^bd ")` fires every time | ✓ VALIDATED | hooks, determinism, claude-code |
 | 002 | beads-modeling | standard | `bd` installs; custom types `requirement`/`phase` work; parent/child auto-close cascade fires | ⚠ VALIDATED-WITH-REFINEMENT | bd, modeling, custom-types, cascade, bd-recipes |
-| 003 | cross-worktree-sharing | standard | Two worktrees with shared `BEADS_DIR` see identical state; writes propagate without manual sync | PENDING | bd, worktrees, BEADS_DIR |
+| 003 | cross-worktree-sharing | standard | Two worktrees with shared `BEADS_DIR` see identical state; writes propagate without manual sync | ✓ VALIDATED | bd, worktrees, BEADS_DIR, embedded-dolt |
 | 004 | jsonl-roundtrip | standard | `bd export` → `bd init --from-jsonl` reconstructs an equivalent graph | PENDING | bd, jsonl, portability |
 | 005 | concurrent-merge | standard | Two parallel processes mutating one issue both persist (Dolt cell-merge); rapid cross-process creates produce zero ID collisions | PENDING | bd, concurrency, dolt, hash-ids |
