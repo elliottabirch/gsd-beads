@@ -45,8 +45,14 @@ install_file "$REPO/scripts/regen-requirements.sh"    "$SCRIPTS_DEST/regen-requi
 # Atomic write: mktemp+mv (T-02-07 mitigation).
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
 fragment_resolved="$(mktemp)"
-sed "s|\$CLAUDE_PROJECT_DIR/.claude/hooks|$HOOKS_DEST|g" "$FRAGMENT" > "$fragment_resolved"
 tmp="$(mktemp)"
+# Localized trap (WR-01 fix): under `set -e`, any failure in sed/jq/mv
+# below would abort before the explicit `rm -f` cleanup, leaking the
+# tempfiles into /tmp. The trap guarantees cleanup on the error path;
+# the happy path clears the trap and removes $fragment_resolved
+# explicitly so the post-Step-3 environment is unchanged.
+trap 'rm -f "$fragment_resolved" "$tmp"' EXIT
+sed "s|\$CLAUDE_PROJECT_DIR/.claude/hooks|$HOOKS_DEST|g" "$FRAGMENT" > "$fragment_resolved"
 jq -s '
 .[0] as $existing | .[1] as $fragment |
 ($existing.hooks // {}) as $eh | ($fragment.hooks // {}) as $fh |
@@ -67,6 +73,7 @@ jq -s '
 }
 ' "$SETTINGS" "$fragment_resolved" > "$tmp"
 mv "$tmp" "$SETTINGS"
+trap - EXIT
 rm -f "$fragment_resolved"
 
 # ── Step 4: Shadow binary symlink + PATH precedence check (RESEARCH.md A5) ─
