@@ -18,6 +18,7 @@ must_haves:
     - "The shim writes a marker file `<gitdir>/info/.gsd-beads-configured` so it's idempotent (re-checkouts don't reconfigure)"
     - "The append into post-checkout is also idempotent (Pitfall 7) — re-running shim install removes any existing BEGIN..END block before re-adding"
     - "Sentinel-marker shape is `# --- BEGIN GSD-BEADS WORKTREE INIT v1 ---` / `# --- END GSD-BEADS WORKTREE INIT ---` matching CONVENTIONS"
+    - "Per B6: the canonical T-02-06 mitigation (atomic `mktemp + mv`, no `sed -i`) is enforced in Plan 02-05's install.sh; this plan's append-idempotency test covers a defensive in-test helper that mirrors the same pattern."
   artifacts:
     - path: "hooks/worktree-post-checkout.sh"
       provides: "Sentinel-marked block appended to .beads/hooks/post-checkout"
@@ -41,6 +42,8 @@ must_haves:
 Build the worktree post-checkout shim (sentinel-marked block) and its idempotency tests. The shim auto-configures `git config --worktree gsd-beads.dir <source-repo>/.beads` in any new worktree of a beads-managed source repo, removing the need for env-var discipline (REQ-03).
 
 The script is itself idempotent (uses marker file). Plan 02-05's install.sh handles installing the SHIM into bd's `.beads/hooks/post-checkout` chain idempotently (Pitfall 7).
+
+**B6 note:** the canonical T-02-06 mitigation (no `sed -i`, atomic `mktemp + mv`) belongs in Plan 02-05's install.sh — that's where the production append happens. This plan's append-idempotency test exercises a defensive in-test helper that mirrors the same pattern; the `grep -c 'sed -i' tests/worktree-tests/append-idempotency.test.sh` gate is retained as a defensive guard but the load-bearing constraint lives on `install.sh` (Plan 02-05).
 
 Wave-1 (no dependencies; runs parallel with 02-01, 02-02).
 
@@ -123,7 +126,8 @@ Sentinel-marker convention (from CONVENTIONS):
     #!/usr/bin/env bash
     # Tests for the install-time append of worktree-post-checkout.sh into .beads/hooks/post-checkout.
     # Note: the SCRIPT itself is idempotent via marker file. This test covers the APPEND idempotency (Pitfall 7).
-    # The actual append helper lives in Plan 02-05's install.sh; this test exercises just the append logic.
+    # B6 note: the load-bearing T-02-06 mitigation (no `sed -i`, atomic mktemp+mv) lives on install.sh in Plan 02-05.
+    # The actual append helper lives in Plan 02-05's install.sh; this test exercises just the append logic with a defensive in-test helper.
     set -euo pipefail
     echo "[append-idempotency.test.sh] STUB — append helper not yet written"
     # CASE 1: appending the BEGIN..END block to an empty post-checkout file → exactly 1 block
@@ -266,6 +270,8 @@ Sentinel-marker convention (from CONVENTIONS):
     - Old v1 block exists, append v2 (mock by changing marker version in shim copy) → old block removed, new block present
 
     **Threat mitigation (T-02-06):** the append helper uses `mktemp + mv` (atomic rename), avoiding `sed -i.bak` race. Test acceptance criterion verifies `grep -c '\.bak' tests/worktree-tests/append-idempotency.test.sh` is 0 (no `.bak` artifacts left over from sed -i).
+
+    **B6 note (defensive guard):** the `grep -c 'sed -i' tests/worktree-tests/append-idempotency.test.sh` gate below is retained as a defensive guard for the in-test helper. The CANONICAL T-02-06 mitigation lives in Plan 02-05's install.sh — see Plan 02-05 acceptance criterion `grep -c 'sed -i' install.sh returns 0`.
   </action>
   <acceptance_criteria>
     - `hooks/worktree-post-checkout.sh` exists and is executable.
@@ -277,7 +283,7 @@ Sentinel-marker convention (from CONVENTIONS):
     - `bash -n hooks/worktree-post-checkout.sh` exits 0.
     - `bash tests/worktree-tests/auto-config.test.sh` exits 0 with `Passed: 5 / 5` (or all listed CASEs pass).
     - `bash tests/worktree-tests/append-idempotency.test.sh` exits 0 with `Passed: 4 / 4`.
-    - `grep -c 'sed -i' tests/worktree-tests/append-idempotency.test.sh` returns 0 (T-02-06 mitigation: use mktemp+mv not sed -i).
+    - `grep -c 'sed -i' tests/worktree-tests/append-idempotency.test.sh` returns 0 (T-02-06 defensive: in-test helper uses mktemp+mv, not sed -i; B6 note — canonical mitigation lives on install.sh in Plan 02-05).
   </acceptance_criteria>
   <verify>
     <automated>bash tests/worktree-tests/auto-config.test.sh && bash tests/worktree-tests/append-idempotency.test.sh</automated>
@@ -300,7 +306,7 @@ Sentinel-marker convention (from CONVENTIONS):
 
 | Threat ID | Category | Component | Disposition | Mitigation Plan |
 |-----------|----------|-----------|-------------|-----------------|
-| T-02-06 | Tampering | install.sh's append into .beads/hooks/post-checkout | mitigate | Use `mktemp + mv` (atomic rename); avoid `sed -i.bak`. Acceptance criterion: `grep -c 'sed -i' tests/worktree-tests/append-idempotency.test.sh` returns 0. The shim itself only writes to `<gitdir>/info/.gsd-beads-configured` (user-owned dir). |
+| T-02-06 | Tampering | install.sh's append into .beads/hooks/post-checkout | mitigate | **Canonical mitigation:** Plan 02-05's install.sh uses `mktemp + mv` (atomic rename) and `grep -c 'sed -i' install.sh` returns 0. **Defensive in-test:** this plan's `tests/worktree-tests/append-idempotency.test.sh` mirrors the same pattern; `grep -c 'sed -i' tests/worktree-tests/append-idempotency.test.sh` returns 0. The shim itself only writes to `<gitdir>/info/.gsd-beads-configured` (user-owned dir). |
 | (Information disclosure on `gsd-beads.dir` value) | — | git config —worktree | accept | Path of source repo is not secret; config is per-worktree (not committed). |
 </threat_model>
 
@@ -317,12 +323,12 @@ Sentinel-marker convention (from CONVENTIONS):
 - 2 worktree test suites all PASS (≥9 cases combined).
 - REQ-03 satisfied: new worktrees auto-configure `gsd-beads.dir` via `git worktree add` triggering post-checkout.
 - Plan 02-05's install.sh has a clear append target — this plan's tests verify the append helper logic.
-- T-02-06 mitigated: atomic-write append helper in tests; install.sh in 02-05 will use the same approach.
+- T-02-06 mitigated: atomic-write append helper in tests; install.sh in 02-05 owns the canonical mitigation (B6 fix).
 </success_criteria>
 
 <output>
 After completion, create `.planning/phases/02-build-the-layer/02-04-SUMMARY.md` documenting:
 - The shim script behavior + the 5 cases its handling covers
 - The append idempotency contract (Plan 02-05 must use the same `mktemp + mv` pattern)
-- T-02-06 mitigation summary
+- T-02-06 mitigation summary — canonical lives in Plan 02-05's install.sh; this plan provides defensive in-test helper
 </output>
