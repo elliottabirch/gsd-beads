@@ -184,10 +184,16 @@ async function beadsTodoComplete(args, projectDir) {
   return { data: { todo_id: todoId, status: 'completed', backend: 'beads' } };
 }
 
-// Budget ~150ms (2 bd calls)
+// Budget ~200ms (3 bd calls: show + label remove + label add)
 async function beadsMilestoneComplete(args, projectDir) {
   const milestoneId = args[0];
   if (!milestoneId) throw new Error('milestone.complete: requires args[0] = milestone-id');
+  // Validate bead exists before attempting label operations (bd label commands exit 0 on missing IDs)
+  try {
+    execSync(`bd show ${milestoneId} --json`, { cwd: projectDir, encoding: 'utf-8' });
+  } catch (err) {
+    throw new Error(`milestone.complete: bead not found: ${milestoneId}`);
+  }
   execSync(`bd label remove ${milestoneId} active`, { cwd: projectDir });
   execSync(`bd label add ${milestoneId} completed`, { cwd: projectDir });
   return { data: { milestone_id: milestoneId, status: 'completed', backend: 'beads' } };
