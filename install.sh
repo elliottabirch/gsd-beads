@@ -135,7 +135,6 @@ fi
 # Skips `bare` and `prunable` records (RESEARCH.md §Pattern 2).
 # Same gate as Step 6: only on a beads-managed project, not on the gsd-beads repo itself.
 if [ -d "$PWD/.beads" ] && [ "$PWD" != "$REPO" ]; then
-  REPO_BEADS_DIR="$PWD/.beads"
   git -C "$PWD" worktree list --porcelain | awk '
     /^worktree / { p = substr($0, 10); s = 0; next }
     /^bare$/      { s = 1; next }
@@ -144,7 +143,14 @@ if [ -d "$PWD/.beads" ] && [ "$PWD" != "$REPO" ]; then
     END           { if (p != "" && !s) print p }
   ' | while IFS= read -r wt_path; do
     [ -d "$wt_path" ] || continue
-    ( cd "$wt_path" && bash "$REPO_BEADS_DIR/hooks/post-checkout" HEAD HEAD 1 ) || true
+    # WR-05 fix: invoke the GSD shim source directly rather than execing the
+    # project's whole .beads/hooks/post-checkout. The project's post-checkout
+    # may contain pre-existing user content (preserved by Step 6's sentinel
+    # replace), and running that with synthetic args HEAD HEAD 1 could trigger
+    # unintended side effects (e.g. an existing hook that runs `npm install`
+    # on flag=1). Sourcing the shim from $REPO/hooks/ keeps backfill scoped
+    # to GSD-BEADS logic only.
+    ( cd "$wt_path" && bash "$REPO/hooks/worktree-post-checkout.sh" HEAD HEAD 1 ) || true
   done
   echo "backfilled gsd-beads config across $(git -C "$PWD" worktree list --porcelain | awk '/^worktree /{c++} END{print c+0}') worktree record(s)"
 fi
