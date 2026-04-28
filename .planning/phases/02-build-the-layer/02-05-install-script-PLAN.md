@@ -28,10 +28,11 @@ must_haves:
     - "install.sh deep-merges settings.fragment.json into ~/.claude/settings.json with array dedup on (matcher, command, if) tuple — Pitfall 6"
     - "install.sh symlinks bin/gsd-sdk-shadow.mjs to ~/.local/bin/gsd-sdk and verifies PATH precedence; warns (not aborts) if shadowed (Volta trap — RESEARCH.md A5)"
     - "install.sh seeds 7 bd memories under gsd-beads:* namespace; idempotent via `bd forget` then `bd remember` (REQ-08 — gsd-beads:vocabulary surfaces ready-set guidance)"
-    - "install.sh appends hooks/worktree-post-checkout.sh to .beads/hooks/post-checkout via atomic mktemp+mv (Pitfall 7 / T-02-06)"
+    - "install.sh appends hooks/worktree-post-checkout.sh to .beads/hooks/post-checkout via atomic mktemp+mv (Pitfall 7 / T-02-06; canonical mitigation per B6 fix — `grep -c 'sed -i' install.sh` returns 0)"
     - "install.sh NEVER writes anything under ~/.claude/get-shit-done/ (REQ-02; T-02-09 grep guard)"
     - "install.sh is idempotent — running twice produces zero diff in ~/.claude/settings.json, no duplicate marker blocks, refreshes memories"
     - "recipe/gsd-beads-recipe.md is a single-file informational pointer (D-03 revised — bd recipe is discovery surface, not installer; per Pitfall 1)"
+    - "Per W7, install/memories/vocabulary.md MUST contain the literal string `bd ready` (REQ-08 source-of-truth gate — vocabulary memory surfaces canonical 'what's next?' command)"
   artifacts:
     - path: "install.sh"
       provides: "Self-contained installer — preflight + symlink + settings merge + memory seed + worktree append"
@@ -43,7 +44,7 @@ must_haves:
     - path: "tests/install-tests/idempotency.test.sh"
       provides: "Snapshot 4 files (settings.json, post-checkout, symlink, memories), run install twice, diff = empty"
     - path: "tests/install-tests/settings-merge.test.sh"
-      provides: "4 deep-merge cases (empty/no-overlap/partial-overlap/full-conflict) + dedupe on (matcher, command, if)"
+      provides: "5 deep-merge cases (empty/no-overlap/partial-overlap/full-conflict/different-matchers) + dedupe on (matcher, command, if) (W6 fix)"
     - path: "tests/install-tests/memory-seeding.test.sh"
       provides: "Asserts 7 keys present under gsd-beads:*"
     - path: "tests/install-tests/path-precedence.test.sh"
@@ -80,6 +81,8 @@ This is the single user-facing entry point. After running it on a fresh project,
 5. Discovery via `bd setup --list` showing `gsd-beads` (recipe registration; informational)
 
 Hard constraint: install.sh MUST NOT write anywhere under `~/.claude/get-shit-done/` (REQ-02 / T-02-09).
+
+**Per B6 fix:** install.sh is the CANONICAL home of the T-02-06 mitigation — `grep -c 'sed -i' install.sh` returns 0 (atomic mktemp+mv only).
 
 Wave-3, depends on Plans 02-01 (helper scripts), 02-02 (hook scripts + settings.fragment.json), 02-03 (shadow binary), 02-04 (worktree shim).
 
@@ -179,7 +182,7 @@ jq -s '.[0] * .[1] | .hooks |= (
 
     **Memory text files** (each is plain markdown, single-paragraph or list — used by install.sh as `bd remember --key gsd-beads:<name> "$(cat install/memories/<name>.md)"`):
 
-    `install/memories/vocabulary.md`:
+    `install/memories/vocabulary.md` (W7 fix — MUST contain literal string `bd ready` for REQ-08 source-of-truth gate):
     ```
     gsd-beads vocabulary:
 
@@ -279,11 +282,12 @@ jq -s '.[0] * .[1] | .hooks |= (
     - CASE 3: ~/.local/bin/gsd-sdk symlink exists and points at the same target after both runs.
     - CASE 4: 7 bd memories present after both runs (idempotent forget+remember).
 
-    `tests/install-tests/settings-merge.test.sh` cases:
+    `tests/install-tests/settings-merge.test.sh` cases (W6 fix — add CASE 5):
     - CASE 1: empty existing settings.json + fragment → fragment becomes the entire hooks block.
     - CASE 2: existing has different hooks (no overlap) → both sets present after merge.
     - CASE 3: partial overlap (existing has same matcher, different command) → both retained, no dedup.
     - CASE 4: full conflict (same matcher + command + if) → deduped to one entry.
+    - **CASE 5 (W6 fix):** same command + same `if` filter, but DIFFERENT matchers (e.g., one entry under PreToolUse `Edit|Write`, another under PostToolUse `Bash`). Both must be retained — NO merge — because they target different events. The dedup key (matcher, command, if) treats different matchers as distinct entries.
 
     `tests/install-tests/memory-seeding.test.sh`:
     - CASE 1-7: each of 7 keys present after install.
@@ -306,17 +310,18 @@ jq -s '.[0] * .[1] | .hooks |= (
     - `ls install/memories/*.md | wc -l` returns 7.
     - `recipe/gsd-beads-recipe.md` contains string `git clone` and string `install.sh`.
     - `grep -c gsd-beads-init recipe/gsd-beads-recipe.md` returns 0 (D-03 revised — recipe is pointer, not installer).
+    - **W7 fix (REQ-08 source-of-truth gate):** `grep -c 'bd ready' install/memories/vocabulary.md` returns at least 1 (vocabulary memory mentions canonical "what's next?" command).
     - All 5 test stubs are executable, syntactically valid (`bash -n`), and exit 1.
     - `grep -c '^# CASE' tests/install-tests/idempotency.test.sh` returns at least 4.
-    - `grep -c '^# CASE' tests/install-tests/settings-merge.test.sh` returns at least 4.
+    - `grep -c '^# CASE' tests/install-tests/settings-merge.test.sh` returns at least 5 (W6 fix — CASE 5 added).
     - `grep -c '^# CASE' tests/install-tests/memory-seeding.test.sh` returns at least 7.
     - `grep -c '^# CASE' tests/install-tests/path-precedence.test.sh` returns at least 3.
     - `grep -c '^# CASE' tests/install-tests/no-gsd-core-mutation.test.sh` returns at least 3.
   </acceptance_criteria>
   <verify>
-    <automated>for f in tests/install-tests/*.test.sh; do bash -n "$f"; done && [ "$(ls install/memories/*.md | wc -l)" = "7" ] && grep -q 'git clone' recipe/gsd-beads-recipe.md</automated>
+    <automated>for f in tests/install-tests/*.test.sh; do bash -n "$f"; done && [ "$(ls install/memories/*.md | wc -l)" = "7" ] && grep -q 'git clone' recipe/gsd-beads-recipe.md && grep -q 'bd ready' install/memories/vocabulary.md</automated>
   </verify>
-  <done>13 input files in place. Tests are red Wave 0 markers. 7 memory texts ready for seeding. Recipe is informational pointer.</done>
+  <done>13 input files in place. Tests are red Wave 0 markers. 7 memory texts ready for seeding. Recipe is informational pointer. W7 vocabulary gate present.</done>
 </task>
 
 <task type="auto" tdd="true">
@@ -340,13 +345,14 @@ jq -s '.[0] * .[1] | .hooks |= (
   </read_first>
   <behavior>
     - Test 1 (PRE-FLIGHT): missing bd → exit non-zero with `ERROR: bd not installed`. Same for jq, node. node <22 → ERROR.
-    - Test 2 (SETTINGS MERGE): all 4 settings-merge cases PASS — dedup keyed on (matcher, command, if).
+    - Test 2 (SETTINGS MERGE): all 5 settings-merge cases PASS — dedup keyed on (matcher, command, if); CASE 5 (different matchers) verifies both retained (W6 fix).
     - Test 3 (SYMLINK): ~/.local/bin/gsd-sdk exists and is symlink to absolute path of bin/gsd-sdk-shadow.mjs.
     - Test 4 (PATH WARN): when ~/.volta/bin precedes ~/.local/bin, install.sh emits `⚠ shadow at ~/.local/bin/gsd-sdk is shadowed by <other>` AND exits 0 (warn-not-abort per RESEARCH.md A5).
     - Test 5 (MEMORY SEED): all 7 keys under gsd-beads:* present after install (verified via `bd memories | grep gsd-beads:`).
     - Test 6 (WORKTREE APPEND): .beads/hooks/post-checkout contains exactly 1 BEGIN..END block; running install twice → still 1 block.
     - Test 7 (T-02-09 GUARD): grep guard + sentinel sandbox test PASS — no writes under ~/.claude/get-shit-done/.
     - Test 8 (IDEMPOTENCY): running install.sh twice produces zero diff in ~/.claude/settings.json, no duplicate marker, refreshes memories.
+    - Test 9 (B6 — sed -i guard): `grep -c 'sed -i' install.sh` returns 0 (canonical T-02-06 mitigation).
   </behavior>
   <action>
     **Step A: Implement `install.sh`.** Comprehensive script per PATTERNS.md install.sh section + Runtime State Inventory.
@@ -355,6 +361,7 @@ jq -s '.[0] * .[1] | .hooks |= (
     #!/usr/bin/env bash
     # gsd-beads installer — self-contained per D-04 revised.
     # Idempotent (REQ-06). Never touches ~/.claude/get-shit-done/ (REQ-02 / T-02-09).
+    # T-02-06 canonical mitigation (B6 fix): no `sed -i`; atomic mktemp+mv only.
     set -euo pipefail
 
     REPO="$(cd "$(dirname "$0")" && pwd -P)"
@@ -429,6 +436,7 @@ jq -s '.[0] * .[1] | .hooks |= (
 
     # ── Step 6: Worktree post-checkout shim append (Pitfall 7 / T-02-06) ─
     # Only append if the project has .beads/ AND we're being run inside a project (not just from gsd-beads repo).
+    # B6 canonical mitigation: atomic mktemp+mv ONLY — no `sed -i`.
     if [ -d "$PWD/.beads" ] && [ "$PWD" != "$REPO" ]; then
       target="$PWD/.beads/hooks/post-checkout"
       mkdir -p "$(dirname "$target")"
@@ -510,15 +518,19 @@ jq -s '.[0] * .[1] | .hooks |= (
     # ... rest of cases
     ```
 
-    For `tests/install-tests/settings-merge.test.sh`: build 4 fixture settings.json files (empty, no-overlap, partial, full-conflict), run install merge logic on each, assert dedup count.
+    For `tests/install-tests/settings-merge.test.sh`: build 5 fixture settings.json files (empty, no-overlap, partial, full-conflict, **different-matchers**), run install merge logic on each, assert dedup count.
+
+    **CASE 5 fixture (W6 fix) — different-matchers test:** Construct an existing settings.json that has a hook entry under PreToolUse matcher `Edit|Write` with command `/foo/bar.sh` and `if: "Bash(*)"`, plus a fragment that defines a hook with the SAME command `/foo/bar.sh` and SAME `if: "Bash(*)"` but under PostToolUse matcher `Bash`. After deep-merge, BOTH entries must be retained. Verify by `jq` query: `jq '[.. | objects | select(has("command")) | .command]' merged.json | jq 'length'` returns 2 (or whatever the expected total is, with both retained because matchers differ).
 
     For `tests/install-tests/memory-seeding.test.sh`: after install, assert 7 keys via `bd memories | grep '^gsd-beads:' | wc -l` == 7.
 
     For `tests/install-tests/path-precedence.test.sh`: simulate 3 PATH scenarios via `PATH=...` overrides, run install, capture stdout, grep for `✓ shadow active` or `⚠ shadow at`.
 
-    **Threat mitigation (T-02-07):** settings.json merge uses `jq` (not heredoc) and atomic `mv tmp settings.json`. Acceptance: `grep -c 'cat << ' install.sh` returns 0.
+    **Threat mitigation (T-02-07):** settings.json merge uses `jq` (not heredoc) and atomic `mv tmp settings.json`. Acceptance: `grep -c '<<' install.sh` returns 0 (W5 fix — any heredoc forbidden, simpler than the broken `cat <<\| <<EOF` pattern).
 
     **Threat mitigation (T-02-09):** Tests 1-3 above. The static grep is the strongest guard.
+
+    **Threat mitigation (T-02-06 / B6 fix):** install.sh uses atomic `mktemp + mv` for the worktree append; NO `sed -i`. Acceptance: `grep -c 'sed -i' install.sh` returns 0.
   </action>
   <acceptance_criteria>
     - `install.sh` exists, executable.
@@ -531,11 +543,12 @@ jq -s '.[0] * .[1] | .hooks |= (
     - `grep -c 'BEGIN GSD-BEADS WORKTREE INIT' install.sh` returns at least 1 (sentinel).
     - `grep -c 'mv "$tmp"' install.sh` returns at least 1 (atomic write — T-02-07).
     - `grep -c '~/.claude/get-shit-done\|/.claude/get-shit-done/' install.sh` returns 0 (T-02-09; REQ-02).
-    - `grep -c 'cat <<\| <<EOF' install.sh` returns 0 (CONVENTIONS — no heredoc for JSON).
+    - **W5 fix:** `grep -c '<<' install.sh` returns 0 (no heredoc anywhere — simpler, stricter check than the original broken `cat <<\| <<EOF` regex).
+    - **B6 fix (canonical T-02-06 mitigation):** `grep -c 'sed -i' install.sh` returns 0 (no in-place sed; atomic mktemp+mv only).
     - `bash -n install.sh` exits 0.
     - All 5 install tests pass:
       - `bash tests/install-tests/idempotency.test.sh` exits 0.
-      - `bash tests/install-tests/settings-merge.test.sh` exits 0.
+      - `bash tests/install-tests/settings-merge.test.sh` exits 0 (5/5 cases — W6 CASE 5 included).
       - `bash tests/install-tests/memory-seeding.test.sh` exits 0 (7/7 keys).
       - `bash tests/install-tests/path-precedence.test.sh` exits 0.
       - `bash tests/install-tests/no-gsd-core-mutation.test.sh` exits 0 (3/3 guards green).
@@ -543,7 +556,7 @@ jq -s '.[0] * .[1] | .hooks |= (
   <verify>
     <automated>bash tests/install-tests/no-gsd-core-mutation.test.sh && bash tests/install-tests/idempotency.test.sh && bash tests/install-tests/settings-merge.test.sh && bash tests/install-tests/memory-seeding.test.sh && bash tests/install-tests/path-precedence.test.sh</automated>
   </verify>
-  <done>install.sh production-ready with deep-merge + dedup, atomic settings.json write, idempotent memory seeding, sentinel-marker worktree append, PATH-precedence warning, REQ-02 grep guard. All 5 install test suites PASS.</done>
+  <done>install.sh production-ready with deep-merge + dedup, atomic settings.json write, idempotent memory seeding, sentinel-marker worktree append, PATH-precedence warning, REQ-02 grep guard. All 5 install test suites PASS. B6/W5/W6/W7 fixes verified by grep gates.</done>
 </task>
 
 </tasks>
@@ -563,17 +576,19 @@ jq -s '.[0] * .[1] | .hooks |= (
 
 | Threat ID | Category | Component | Disposition | Mitigation Plan |
 |-----------|----------|-----------|-------------|-----------------|
-| T-02-07 | Tampering / DoS | install.sh settings.json deep-merge | mitigate | Use `jq -s` + atomic `mv tmp settings.json`. Reject heredoc-based JSON construction (acceptance: `grep -c 'cat <<' install.sh` returns 0). The dedup `unique_by("\(.command)\(.if // "")")` includes `if` filter (Pitfall 6 — same command + different if are distinct). |
+| T-02-07 | Tampering / DoS | install.sh settings.json deep-merge | mitigate | Use `jq -s` + atomic `mv tmp settings.json`. Reject heredoc-based JSON construction (W5 fix — acceptance: `grep -c '<<' install.sh` returns 0). The dedup `unique_by("\(.command)\(.if // "")")` includes `if` filter (Pitfall 6 — same command + different if are distinct). |
 | T-02-08 | DoS / User experience | install.sh PATH precedence check | accept (warn, do not auto-fix) | Detect Volta-shadow trap; emit warning with remediation steps. Do NOT modify ~/.profile automatically (intrusive — out of scope per RESEARCH.md A5 / Open Question 5). |
 | T-02-09 | Tampering (REQ-02 violation) | install.sh + tests | mitigate | Static grep guard rejects any reference to `~/.claude/get-shit-done/`; sentinel sandbox test verifies install does not modify a sentinel file dropped under that path. Both tests in `tests/install-tests/no-gsd-core-mutation.test.sh`. |
-| T-02-06 | Tampering | install.sh worktree-post-checkout append | mitigate | Use `mktemp + sed -strip-block + cat append + mv` (atomic rename, no `sed -i.bak`). The sentinel marker `# --- BEGIN GSD-BEADS WORKTREE INIT v1 ---` is the dedup key. |
+| T-02-06 | Tampering | install.sh worktree-post-checkout append | mitigate | **CANONICAL (B6 fix):** `mktemp + sed-strip-block + cat-append + mv` (atomic rename, no `sed -i.bak`). Acceptance gate: `grep -c 'sed -i' install.sh` returns 0. The sentinel marker `# --- BEGIN GSD-BEADS WORKTREE INIT v1 ---` is the dedup key. |
 </threat_model>
 
 <verification>
 - All 5 install test suites PASS.
 - `grep -c '~/.claude/get-shit-done\|/.claude/get-shit-done/' install.sh` returns 0.
 - `grep -c 'jq -s' install.sh` returns at least 1.
-- `grep -c 'cat <<\| <<EOF' install.sh` returns 0.
+- `grep -c '<<' install.sh` returns 0 (W5 fix — no heredoc).
+- `grep -c 'sed -i' install.sh` returns 0 (B6 fix — canonical T-02-06 mitigation).
+- `grep -c 'bd ready' install/memories/vocabulary.md` returns at least 1 (W7 fix — REQ-08 source-of-truth gate).
 - `bash -n install.sh` exits 0.
 - After running install.sh in a sandbox HOME, `[ -L "$HOME/.local/bin/gsd-sdk" ]` is true.
 - `bd memories | grep -c '^gsd-beads:'` returns 7 after install.
@@ -581,21 +596,22 @@ jq -s '.[0] * .[1] | .hooks |= (
 
 <success_criteria>
 - install.sh is the canonical entrypoint (D-04 revised) — `git clone && ./install.sh` produces a fully working layer.
-- Settings.json deep-merge correctly handles all 4 cases including `if`-filter dedup (Pitfall 6).
+- Settings.json deep-merge correctly handles all 5 cases including `if`-filter dedup (Pitfall 6) AND different-matchers retention (W6 fix CASE 5).
 - Symlink to ~/.local/bin/gsd-sdk + PATH precedence warning (Volta-trap aware per RESEARCH.md A5).
 - 7 bd memories seeded under `gsd-beads:*` namespace; idempotent.
-- worktree-post-checkout.sh appended to .beads/hooks/post-checkout via sentinel-marker (Pitfall 7); idempotent.
+- worktree-post-checkout.sh appended to .beads/hooks/post-checkout via sentinel-marker (Pitfall 7); idempotent; canonical T-02-06 mitigation (B6 fix — `grep -c 'sed -i' install.sh` returns 0).
 - Recipe registered with `bd setup --add gsd-beads <path>` for discovery (D-03 revised — informational pointer only).
 - REQ-02 honored: no writes under ~/.claude/get-shit-done/. Verified by static grep + sentinel sandbox test.
 - REQ-06 honored: idempotent installation; running twice produces zero diff.
-- REQ-08 honored: gsd-beads:vocabulary memory mentions `bd ready` as canonical "what's next".
+- REQ-08 honored: gsd-beads:vocabulary memory mentions `bd ready` as canonical "what's next" (W7 source-of-truth gate).
 </success_criteria>
 
 <output>
 After completion, create `.planning/phases/02-build-the-layer/02-05-SUMMARY.md` documenting:
 - The install.sh contract (steps 1-7), invocation (`git clone && ./install.sh`)
 - The 7 bd memory keys seeded
-- Settings.json deep-merge dedup key (matcher, command, if)
-- T-02-07, T-02-08, T-02-09, T-02-06 mitigations
+- Settings.json deep-merge dedup key (matcher, command, if) + the 5 test cases
+- T-02-07, T-02-08, T-02-09, T-02-06 mitigations (canonical home for T-02-06 per B6 fix)
 - The Volta-PATH-trap warning text users will see
+- B6/W5/W6/W7 fixes and their grep-gate invariants
 </output>
