@@ -8,28 +8,27 @@ Throwaway test of the architectural assumptions in
 `notes/beads-gsd-architecture.md` before committing to the full layer. See
 `notes/spike-validation-plan.md` for what it must validate.
 
-**Status:** pending
+**Status:** complete
 **Depends on:** —
 
 ### Phase 2: Build the layer
 
 The full skill + hook + script implementation. Gated on Phase 1 success.
 
-**Status:** pending
+**Goal:** Productionize the 13 spike POCs into a `git clone && ./install.sh` distribution that gates GSD planning state behind beads, leaving GSD core untouched (REQ-01..REQ-08).
+
+**Status:** planned
 **Depends on:** Phase 1
+**Requirements:** [REQ-01, REQ-02, REQ-03, REQ-04, REQ-05, REQ-06, REQ-07, REQ-08]
+**Plans:** 6 plans
 
-Subscope (subject to refinement during `/gsd-plan-phase`):
-
-- New skills: `/gsd-beads-init`, `/gsd-beads-new-milestone`,
-  `/gsd-beads-add-phase`, `/gsd-beads-add-todo`, `/gsd-beads-plant-seed`,
-  `/gsd-beads-progress`, `/gsd-beads-execute-phase`, `/gsd-beads-ready`
-- Scripts: `bd-sync.sh`, `bd-export-roadmap.sh`, `bd-export-requirements.sh`
-- Hook fragment: `settings.fragment.json` with `PostToolUse` on `bd ` Bash +
-  `PreToolUse` block on `Edit`/`Write` to state-bearing MD paths
-- Install script: symlink + settings.json merge
-- Substitute paths for upstream GSD agents that write state-bearing MD
-  (`gsd-roadmapper`, `gsd-add-phase`, `gsd-new-milestone`, `gsd-add-todo`,
-  `gsd-plant-seed`, `gsd-add-backlog`)
+Plans:
+- [ ] 02-01-bd-helpers-PLAN.md — `cascade-loop.sh`, `regen-roadmap.sh`, `regen-requirements.sh` (REQ-01)
+- [ ] 02-02-hooks-PLAN.md — `block-state-md.sh`, `bd-sync.sh`, `block-gsd-sdk-mutation.sh` + `settings.fragment.json` + 3 hook test suites (REQ-04, REQ-07)
+- [ ] 02-03-shadow-binary-PLAN.md — `gsd-sdk-shadow.mjs` + 13 bd-backed handlers + `wrap-mutation.mjs` (REQ-01, REQ-02, REQ-04)
+- [ ] 02-04-worktree-init-PLAN.md — `worktree-post-checkout.sh` sentinel-marker shim + idempotency tests (REQ-03)
+- [ ] 02-05-install-script-PLAN.md — `install.sh` self-contained installer + bd memory seeding + symlink (REQ-02, REQ-06, REQ-08)
+- [ ] 02-06-e2e-smoke-test-PLAN.md — fresh fixture E2E + perf gate + concurrent-merge + post-gsd-update + bd-ready (REQ-01..REQ-08)
 
 ### Phase 3: Cross-worktree validation
 
