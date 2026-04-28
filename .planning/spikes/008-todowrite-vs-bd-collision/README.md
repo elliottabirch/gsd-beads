@@ -39,15 +39,24 @@ NOT match TodoWrite. TodoWrite writes to Claude Code's internal task
 system, not to a file path — there's nothing to intercept. Confirmed by
 inspecting the hook's matcher (`Edit|Write`).
 
-**The carve-out, for the gsd-beads CLAUDE.md addendum:**
+**The carve-out, seeded as a `bd remember` memory at gsd-beads install time:**
 
-> **TodoWrite is allowed for in-session progress tracking only.** When
-> the work survives this conversation — a bug to fix, a phase to
-> implement, a feature to add — file it as a beads issue (`bd create
-> ...` or `/gsd-beads-add-todo`). When it's "track wave 2 of 3 progress
-> while I execute this phase", `TodoWrite` is the right tool.
+```bash
+bd remember --key gsd-beads:todowrite \
+  "TodoWrite is allowed for in-session ephemeral progress tracking only. \
+When the work survives this conversation — a bug to fix, a phase to \
+implement, a feature to add — file it as a beads issue (bd create or \
+/gsd-beads-add-todo). When it's 'track wave 2 of 3 progress while I \
+execute this phase', TodoWrite is the right tool."
+```
+
+This is auto-surfaced via `bd prime` at SessionStart, so every session
+in a beads-managed project sees the rule. (NOT a CLAUDE.md addendum —
+that pattern was corrected during spike review; see Spike 002 Iteration 11
+for the rationale.)
 
 ## Verdict
 
 **VALIDATED ✓** — no actual technical conflict. Document the carve-out
-in the gsd-beads CLAUDE.md addendum and the issue resolves itself.
+via `bd remember --key gsd-beads:todowrite` at gsd-beads install time
+and the issue resolves itself.

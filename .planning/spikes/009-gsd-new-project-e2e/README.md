@@ -84,20 +84,37 @@ likely report the failure rather than retry through the substitute.**
 That's why `/gsd-beads-new-project` must be the entry point users (and
 agents) reach for in beads-managed projects.
 
-## CLAUDE.md routing for habits
+## Vocabulary routing via bd memory
 
-The gsd-beads addendum to CLAUDE.md should include:
+Persistent gsd-beads instructions live as bd memories (NOT a CLAUDE.md
+addendum — see Spike 002 Iteration 11 for the rationale). gsd-beads'
+install seeds the vocabulary memory:
 
-> **In beads-managed projects, prefer `/gsd-beads-*` over `/gsd-*` for
-> any skill that creates/modifies workflow state:**
-> - `/gsd-beads-new-project` instead of `/gsd-new-project`
-> - `/gsd-beads-add-phase` instead of `/gsd-add-phase`
-> - `/gsd-beads-add-todo` instead of `/gsd-add-todo`
-> - ... [full 13-item list]
->
-> The legacy `/gsd-*` versions still exist; they're blocked from
-> writing state-bearing markdown by hooks, but you'll get a friendlier
-> experience using the `-beads-` versions directly.
+```bash
+bd remember --key gsd-beads:vocabulary "\
+In beads-managed projects, prefer /gsd-beads-* over /gsd-* for any skill \
+that creates/modifies workflow state:
+  /gsd-beads-new-project       (instead of /gsd-new-project)
+  /gsd-beads-add-phase         (instead of /gsd-add-phase)
+  /gsd-beads-add-todo          (instead of /gsd-add-todo)
+  /gsd-beads-add-backlog       (instead of /gsd-add-backlog)
+  /gsd-beads-plant-seed        (instead of /gsd-plant-seed)
+  /gsd-beads-new-milestone     (instead of /gsd-new-milestone)
+  /gsd-beads-complete-milestone(instead of /gsd-complete-milestone)
+  /gsd-beads-insert-phase      (instead of /gsd-insert-phase)
+  /gsd-beads-review-backlog    (instead of /gsd-review-backlog)
+  /gsd-beads-plan-milestone-gaps (instead of /gsd-plan-milestone-gaps)
+  /gsd-beads-from-gsd2         (instead of /gsd-from-gsd2)
+  /gsd-beads-check-todos       (instead of /gsd-check-todos)
+  /gsd-beads-roadmapper        (instead of the gsd-roadmapper agent)
+
+The legacy /gsd-* versions still exist; they're blocked from writing \
+state-bearing markdown by hooks, but you'll get a friendlier experience \
+using the -beads- versions directly."
+```
+
+Auto-surfaced every session via `bd prime`'s memories section. Idempotent
+on re-install: `bd forget gsd-beads:vocabulary` first if reseeding.
 
 ## Verdict
 

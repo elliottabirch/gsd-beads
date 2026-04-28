@@ -254,6 +254,36 @@ Label filters cleanly distinguish requirements from phases:
 `bd list -l gsd:requirement` and `bd list -l gsd:phase` both return the
 expected slices.
 
+**Iteration 11 — corrected: persistent instructions go in bd memories,
+not CLAUDE.md addendum.** Reviewed by user during spike-review pass.
+Earlier iterations of this README said gsd-beads should "append to bd's
+CLAUDE.md" with a sentinel-marked block. That was wrong: in a beads-native
+workflow, the canonical home for persistent project knowledge is **bd
+memories** (`bd remember --key <key> "..."`), surfaced by `bd prime` at
+SessionStart. bd's own CLAUDE.md block is just a thin pointer to "run
+bd prime"; the substance lives in `bd prime`'s output (which includes
+memories).
+
+gsd-beads' install seeds canonical instructions via `bd remember` calls
+keyed under the `gsd-beads:` namespace, e.g.:
+
+```
+bd remember --key gsd-beads:vocabulary       "Use /gsd-beads-* skills..."
+bd remember --key gsd-beads:state-paths      "ROADMAP.md/REQUIREMENTS.md/todos/seeds are GENERATED, do not edit..."
+bd remember --key gsd-beads:type-strategy    "Requirements + phases are type=epic + label gsd:requirement / gsd:phase..."
+bd remember --key gsd-beads:link-default     "Use bd link <c> <p> --type parent-child; bd dep add defaults to 'blocks'..."
+bd remember --key gsd-beads:discovered-from  "When you uncover work mid-phase, use bd link --type discovered-from..."
+bd remember --key gsd-beads:todowrite        "TodoWrite for in-session ephemeral; bd for cross-session persistent..."
+```
+
+Properties of this approach:
+- Auto-surfaced via `bd prime` (SessionStart + PreCompact hooks)
+- Searchable: `bd memories gsd-beads`
+- Survives JSONL roundtrip (Spike 004) — exported by default
+- Updates via `bd forget gsd-beads:* && reseed-script` on `gsd-beads update`
+- No CLAUDE.md edits needed — bd's own CLAUDE.md block already directs
+  agents to run `bd prime`, and our memories are surfaced through that.
+
 ## Results
 
 **Verdict: VALIDATED-WITH-REFINEMENT ✓**
@@ -294,11 +324,12 @@ caveat: the cascade requires gsd-beads' own ~60-line script
 
 - **Beads ships its own Claude Code integration via `bd setup claude`.**
   gsd-beads should LAYER on top — install bd's recipe, then add gsd-beads'
-  own PreToolUse(Edit|Write) blocker + PostToolUse(Bash, "Bash(bd *)") sync
-  + GSD-specific CLAUDE.md addendum (sentinel-merged like bd does). The
-  hooks are orthogonal — bd's SessionStart/PreCompact handle context
+  own PreToolUse(Edit|Write) blocker + PostToolUse(Bash, "Bash(bd *)") sync.
+  The hooks are orthogonal — bd's SessionStart/PreCompact handle context
   injection; gsd-beads' Edit/Write/Bash hooks handle enforcement +
-  regeneration.
+  regeneration. **Persistent gsd-beads instructions live as `bd remember`
+  memories** with the `gsd-beads:` key prefix (NOT as a CLAUDE.md addendum) —
+  see "Iteration 11" below.
 
 - **gsd-beads should be a `bd setup --add` custom recipe.** Distribution
   becomes `bd setup --add gsd-beads <path>` then `bd setup gsd-beads`.
@@ -312,8 +343,8 @@ caveat: the cascade requires gsd-beads' own ~60-line script
 
 - **`bd dep add` defaults to `blocks`, not `parent-child`.** The `--type`
   flag (or `bd link --type parent-child`) is required. Easy footgun for
-  agents that follow generic bd docs. Worth flagging in gsd-beads' own
-  CLAUDE.md addendum.
+  agents that follow generic bd docs. Worth seeding via
+  `bd remember --key gsd-beads:link-default "Use bd link <c> <p> --type parent-child for the GSD hierarchy; bd dep add defaults to 'blocks' which is wrong for our model"`.
 
 - **`bd dep tree` and `bd children` are different commands.** `dep tree`
   walks `blocks` deps; `children` walks `parent-child`. gsd-beads'
