@@ -13,6 +13,31 @@
 # Stack: bash + jq + bd CLI only (no Node, no Python).
 set -euo pipefail
 
+# --- BEGIN GSD-BEADS LOCK PREAMBLE v1 ---
+# Resolve source repo's .beads/ from any worktree, absolutize via cd+pwd -P.
+common=$(git rev-parse --git-common-dir 2>/dev/null) || common="$PWD/.git"
+source_root="$(dirname "$(cd "$common" && pwd -P)")"
+LOCK="$source_root/.beads/.gsd-beads.lock"
+
+# Pre-flight: flock present? (Pitfall 1 — macOS users must brew install flock)
+if ! command -v flock >/dev/null 2>&1; then
+  echo "[gsd-beads] ERROR: flock not installed (macOS: brew install flock)" >&2
+  exit 1
+fi
+
+# Lazy-create lock file (zero bytes, never deleted; *.lock is already in .beads/.gitignore).
+mkdir -p "$(dirname "$LOCK")"
+[ -e "$LOCK" ] || : > "$LOCK"
+
+# Acquire exclusive lock (30s timeout matches bd-sync.sh hook timeout in settings.fragment.json).
+exec 9>"$LOCK"
+if ! flock -x -w 30 9; then
+  echo "[gsd-beads] another regen is in progress at $LOCK — retry shortly" >&2
+  exit 1
+fi
+# Lock auto-released when fd 9 closes (script exit).
+# --- END GSD-BEADS LOCK PREAMBLE v1 ---
+
 # ---------------------------------------------------------------------------
 # Pre-flight: locate project root
 # ---------------------------------------------------------------------------
