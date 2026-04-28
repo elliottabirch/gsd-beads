@@ -252,7 +252,7 @@ No `high` severity. Pure documentation surface.
   </action>
   <acceptance_criteria>
     - `install/memories/worktrees.md` exists.
-    - `wc -l < install/memories/worktrees.md` returns >= 8 (substantive content, not a stub).
+    - `wc -l < install/memories/worktrees.md` returns >= 15 (substantive content per must_haves.artifacts min_lines: 15, not a stub).
     - File contains the literal string `git config --worktree` (D-14 recovery).
     - File contains the literal string `flock` (D-15 reference).
     - File contains the literal string `brew install flock` (Pitfall 1 hint).

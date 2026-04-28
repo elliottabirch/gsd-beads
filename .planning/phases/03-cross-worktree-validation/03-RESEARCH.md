@@ -432,14 +432,14 @@ done
 | A3  | The 30s flock timeout is sufficient for realistic 3-worktree workflows (NOT for stress beyond Spike 003's 40-bead burst). | Pitfall 4                       | If real-world bursts >30s in queue, users see "another regen in progress" errors. Mitigation: documented in WORKTREES.md troubleshooting. Bumping the timeout requires also bumping settings.fragment.json's hook timeout (D-15 explicit on this match). |
 | A4  | `git worktree remove` truly cleans up `.git/worktrees/<name>/` IF the worktree was clean; orphans only on dirty/aborted removes. | Pitfall 5                  | If git always orphans, the WORKTREES.md "trust git" line under-promises. Mitigation: simulation step 5 EXPERIMENTALLY validates this on the dev machine; evidence captured in WORKTREES-EVIDENCE.md.    |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should `install.sh` enable `extensions.worktreeConfig` if it's not already on?**
+1. **RESOLVED: Should `install.sh` enable `extensions.worktreeConfig` if it's not already on?**
    - What we know: `git config --worktree` requires `extensions.worktreeConfig=true` (set per-repo). The post-checkout shim's existing fallback (`git config gsd-beads.dir`) handles the unset case. Phase 2's `tests/worktree-tests/auto-config.test.sh` `make_fixture` helper sets it explicitly.
    - What's unclear: should production `install.sh` set it, or rely on the shim's fallback? Setting it changes user's git repo config — REQ-02 boundary.
    - Recommendation: **leave it to the shim's fallback (current Phase 2 behavior).** The fallback path uses repo-level `git config gsd-beads.dir`, which is shared across all worktrees — equivalent for our use case. No new write to user's repo config beyond what the shim already does. Capture this clarification in WORKTREES.md.
 
-2. **Should `cascade-loop.sh` skip the lock when invoked from `bd-sync.sh` (which has its own implicit serialization via the hook timeout)?**
+2. **RESOLVED: Should `cascade-loop.sh` skip the lock when invoked from `bd-sync.sh` (which has its own implicit serialization via the hook timeout)?**
    - What we know: `bd-sync.sh` runs cascade → regen-roadmap → regen-requirements sequentially. Within a single bd-sync invocation, no internal contention.
    - What's unclear: does the lock add value in the "single bd-sync.sh chain" case, or only in the "two worktrees firing bd-sync.sh simultaneously" case?
    - Recommendation: **always acquire the lock.** The script may be invoked directly (not via bd-sync.sh), and the lock is cheap (~milliseconds when uncontended). D-15's "Coverage" line is explicit: each script acquires at preamble.

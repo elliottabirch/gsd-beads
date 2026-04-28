@@ -284,12 +284,10 @@ No `high` severity threats. The flock retrofit is a defense-in-depth additive ch
   <behavior>
     - Test 1: install.sh fails fast (exit 1) with stderr containing the literal string `flock not installed` when `flock` is removed from PATH.
     - Test 2: install.sh succeeds (exit 0) when `flock` is on PATH (existing behavior preserved).
-    - Test 3: tests/hook-tests/flock-preamble.test.sh CASE 1 — grep-level: all three scripts contain `BEGIN GSD-BEADS LOCK PREAMBLE v1`.
-    - Test 4: tests/hook-tests/flock-preamble.test.sh CASE 2 — grep-level: all three scripts contain `flock -x -w 30 9` and `git rev-parse --git-common-dir`.
-    - Test 5: tests/hook-tests/flock-preamble.test.sh CASE 3 — behavioral: with the lock already held by a backgrounded `flock -x` on the lock file, invoking `regen-roadmap.sh` exits non-zero within ~30s + slack and emits stderr containing `another regen is in progress`.
-    - Test 6: tests/hook-tests/flock-preamble.test.sh CASE 4 — behavioral: same shape as CASE 3 but for `cascade-loop.sh`.
-    - Test 7: tests/hook-tests/flock-preamble.test.sh CASE 5 — behavioral: same shape as CASE 3 but for `regen-requirements.sh`.
-    - Test 8: tests/hook-tests/flock-preamble.test.sh CASE 6 — uncontended path: with no other holder, `regen-roadmap.sh` runs in a synthetic /tmp git fixture and exits 0 (proving the preamble does not break the happy path).
+    - Test 3: tests/hook-tests/flock-preamble.test.sh CASE 1 — grep-level (all three scripts): each of cascade-loop.sh, regen-roadmap.sh, regen-requirements.sh contains `BEGIN GSD-BEADS LOCK PREAMBLE v1` exactly once.
+    - Test 4: tests/hook-tests/flock-preamble.test.sh CASE 2 — grep-level primitives (all three scripts): each contains `flock -x -w 30 9`, `git rev-parse --git-common-dir`, `cd "$common" && pwd -P`, and `another regen is in progress`.
+    - Test 5: tests/hook-tests/flock-preamble.test.sh CASE 3 — behavioral timeout (regen-roadmap.sh only — the canonical script): with the lock already held by a backgrounded `flock -x` on `<fixture>/.beads/.gsd-beads.lock`, invoking `regen-roadmap.sh` exits non-zero within ~30s + slack and emits stderr containing `another regen is in progress`. cascade-loop.sh and regen-requirements.sh share the identical preamble (proven by CASE 1+2) and their multi-script behavioral coverage is delegated to Plan 03-02's simulation harness (Day 4 concurrent burst exercises all three under contention).
+    - Test 6: tests/hook-tests/flock-preamble.test.sh CASE 4 — uncontended happy path (regen-roadmap.sh): in a fresh /tmp git fixture with `bd init` + `mkdir -p .planning`, run `regen-roadmap.sh` (no holder) and assert exit 0 plus that `<fixture>/.beads/.gsd-beads.lock` exists after the run (lazy-created, never deleted — proves the preamble does not break the happy path).
   </behavior>
   <action>
     **Part A — Modify `install.sh`:**

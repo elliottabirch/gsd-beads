@@ -291,7 +291,7 @@ No `high` severity. Test surface only; install.sh delta is read+invoke, no new w
     Pure-function library. Sourced by simulation.sh and worktree-backfill.test.sh.
 
     Functions to define:
-    - `mk_source_repo <dir>` — git init + worktreeConfig=true + initial commit + `bd init --non-interactive --skip-agents` + append the gsd-beads worktree shim to `.beads/hooks/post-checkout` (mirrors install.sh Step 6 logic so the lib is self-contained for testing). Final state: a beads-managed source repo ready for `git worktree add`.
+    - `mk_source_repo <dir>` — git init + worktreeConfig=true + initial commit + `bd init --non-interactive --skip-agents` + `mkdir -p "$dir/.planning"` (so regen-roadmap.sh / regen-requirements.sh's `mktemp + mv` into `.planning/` succeeds in the sandbox; the source repo always has `.planning/` in production) + append the gsd-beads worktree shim to `.beads/hooks/post-checkout` (mirrors install.sh Step 6 logic so the lib is self-contained for testing). Final state: a beads-managed source repo ready for `git worktree add`.
     - `mk_worktree <source_dir> <wt_path> <branch_name>` — `cd $source_dir && git worktree add $wt_path -b $branch_name 2>&1` (the post-checkout fires automatically). Returns 0 on success.
     - `cleanup_sandbox <root>` — `git -C $root worktree list --porcelain | awk ... | xargs -I{} git -C $root worktree remove --force {} 2>/dev/null || true ; rm -rf $root` for full teardown. Used in trap.
     - `bd_in_worktree <wt_path> <args...>` — sets `BEADS_DIR=$source_root/.beads` then runs `(cd $wt_path && bd "$@")`. Source root resolved via `git -C $wt_path rev-parse --git-common-dir`.
@@ -637,7 +637,10 @@ No `high` severity. Test surface only; install.sh delta is read+invoke, no new w
 
 <task type="auto" tdd="true">
   <name>Task 3: Fill in simulation.sh day-by-day flow + 4 invariant assertions + 4 failure injections</name>
-  <files>tests/cross-worktree/simulation.sh</files>
+  <files>
+    tests/cross-worktree/simulation.sh,
+    tests/cross-worktree/lib/inject.sh
+  </files>
   <read_first>
     - tests/cross-worktree/simulation.sh (skeleton from Task 1) — confirm sandbox + lib sourcing + trap is in place.
     - tests/cross-worktree/lib/setup.sh (created in Task 1).
