@@ -2,10 +2,10 @@
 spike: 002
 name: beads-modeling
 type: standard
-validates: "Given a fresh bd init with custom requirement and phase types, when a 3-level hierarchy (req → phase → tasks) is built and all tasks closed, then closing the parents cascades upward — phases close when their tasks all close, and the requirement closes when its phases all close."
+validates: "Given a fresh bd init and the all-epic + label type strategy (REQ and PHASE both = type=epic, distinguished by labels gsd:requirement / gsd:phase, leaves = type=task), when a 3-level hierarchy is built and all tasks closed, then `bd epic close-eligible` looped until quiescent cascades phases up to requirements — full progress visibility via beads' built-in machinery."
 verdict: VALIDATED-WITH-REFINEMENT
 related: [001]
-tags: [bd, modeling, custom-types, cascade, parent-child, bd-recipes]
+tags: [bd, modeling, all-epic, labels, cascade, parent-child, bd-recipes]
 ---
 
 # Spike 002: Beads Modeling
@@ -50,16 +50,32 @@ at https://github.com/steveyegge/beads.
 
 ### Approach comparison for the GSD vocabulary
 
-| Mapping | Free cascade? | Pros | Cons |
-|---|---|---|---|
-| Use built-in `epic`/`story`/`task` | Partial: `bd epic close-eligible` cascades epic-level | Less custom config; stays in beads' canonical model | Loses semantic precision (`requirement` is more than an epic; `phase` ≠ story) |
-| Use custom `requirement`/`phase` + built-in `task` | None built-in | Semantically correct GSD vocabulary | Requires gsd-beads-owned cascade script |
-| **Hybrid (chosen):** custom `requirement`/`phase` + custom recursive cascade | **Full** — all parent-child levels cascade via one script | Semantic precision + full automation; ~50 lines of bash | Maintenance burden of one small script |
+After deeper investigation (prompted by user push-back on the initial
+"custom types" lean), I built and timed **both** approaches end-to-end.
 
-**Chosen approach:** custom types + a recursive cascade-close script invoked
-from gsd-beads' `bd-sync.sh` after every `bd ` command. Proven by
-`cascade-close.sh` here — closes parents whose every parent-child child is
-closed, iterates until convergence.
+| Dimension | A: custom types `requirement`+`phase` | **B (chosen): all-epic + labels `gsd:requirement`/`gsd:phase`** |
+|---|---|---|
+| Cascade implementation | gsd-beads owns ~60 lines (`cascade-close.sh`) | **~5 lines** (`cascade-loop.sh`) — `while bd epic close-eligible \| grep -qv 'No epics'; do :; done` |
+| Cascade time on 7-issue / 2-iteration fixture | 2.7s | **0.86s** (3× faster) |
+| `bd list` output | `[requirement]`/`[phase]` — instant visual distinction | All non-leaves show `[epic]` — distinction via `{gsd:phase}` labels |
+| Distinguishing req from phase | Free, structural (`issue_type`) | Convention via labels (or title prefix) |
+| bd's native epic tooling | `bd epic status` / `close-eligible` ignore us | Apply directly — `bd epic status` shows our hierarchy |
+| Future bd cascade improvements | Don't apply | **Apply automatically** |
+| ROADMAP regen filter | `bd list --type=requirement --json` | `bd list --type=epic -l gsd:requirement --json` |
+| `bd config` warning | Yes (`types.custom not a recognized config key`) | None |
+| Vocabulary in `bd prime` | Agent learns `requirement`/`phase` | Agent already knows `epic` from bd's docs |
+| Risk vector | Cascade script bugs | Label-removal could mis-classify |
+
+**Chosen: Approach B.** The 3× perf win, the 5-line cascade vs 60-line
+custom script, native `bd epic` tooling, and "future bd improvements
+apply automatically" outweigh the loss of structural type distinction.
+Labels are durable enough — agents don't randomly remove them, and
+`bd label propagate` enforces label inheritance.
+
+**Cascade implementation:** see `cascade-loop.sh`. The earlier
+`cascade-close.sh` (custom-types alternative) is kept in this directory
+as the rejected reference — useful if Phase 2 reveals that the all-epic
+approach has unforeseen problems and we need to fall back.
 
 ## How to Run
 
@@ -186,6 +202,57 @@ integration with `SessionStart`/`PreCompact` hooks running `bd prime`
 (an 80-line dynamic workflow context document) plus a sentinel-merged
 CLAUDE.md template. gsd-beads should LAYER on top of this, not replace it.
 Updated the architecture-implication table in this README accordingly.
+
+**Iteration 9 — deeper dive on alternatives (user push-back).**
+The user asked "did we actually look at the bundled skills, and should we
+translate to first-class bd types?" Five additional probes:
+
+a. **Cascade interaction with `bd setup claude`:** verified
+   `cascade-close.sh` runs cleanly in a sandbox where bd's bundled hooks
+   are installed. SessionStart/PreCompact are Claude-Code session events,
+   not bd-internal events; they don't intercept `bd close`. Cascade's
+   internal `bd close <parent>` calls are subprocess invocations, NOT
+   Claude-tool calls — no PostToolUse recursion.
+
+b. **All-epic head-to-head:** built the same fixture twice — once with
+   custom `requirement`/`phase` types + cascade-close.sh, once with
+   type=epic for both levels + `bd epic close-eligible` loop. Timed
+   both: 2.7s vs 0.85s (3× speedup for the all-epic loop).
+
+c. **`bd remember` / `bd memories`:** beads ships a memory system
+   injected at `bd prime` time. Distinct from seeds: memories are
+   persistent context (gotchas, conventions); seeds are forward-looking
+   work items with trigger conditions. **Conclusion:** keep seeds as
+   beads-typed issues with label `gsd:seed`; use `bd remember` for
+   project conventions and gotchas.
+
+d. **`bd federation`:** peer-to-peer between separate Dolt databases
+   on different machines. Orthogonal to spike 003's `BEADS_DIR` (same
+   machine, different worktrees). Not needed for the single-developer
+   MVP audience but available for future multi-dev extension.
+
+e. **`bd hooks install` (the bundled git hooks):** `bd hooks install`
+   adds 5 git hook shims (pre-commit, post-merge, pre-push,
+   post-checkout, prepare-commit-msg). Sentinel-merged so they coexist
+   with project hooks. 300s default timeout with graceful "continue
+   without bd" fallback. Exit code 3 = "no bead store, skip" — safe in
+   un-init'd projects. The `prepare-commit-msg` hook adds **agent
+   identity trailers for forensics**, valuable for `git blame` on
+   agent-driven commits. **Recommendation:** include `bd hooks install`
+   in the gsd-beads install flow.
+
+After presenting the concrete trade-offs, the user chose **Approach B
+(all-epic + labels)** — locking in the simpler, faster, more
+ecosystem-native cascade.
+
+**Iteration 10 — built and validated `cascade-loop.sh`.** 5-line script
+(plus boilerplate) that loops `bd epic close-eligible` until quiescent.
+Verified end-to-end in a fresh sandbox: 7 issues, 4 leaves closed,
+loop reports `Closed 2 epic(s)` (the phases) at iteration 1, then
+`Closed 1 epic(s)` (the requirement) at iteration 2. **0.86s total.**
+Label filters cleanly distinguish requirements from phases:
+`bd list -l gsd:requirement` and `bd list -l gsd:phase` both return the
+expected slices.
 
 ## Results
 
