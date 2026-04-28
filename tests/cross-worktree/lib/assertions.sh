@@ -34,8 +34,15 @@ __assert_fail() {
 assert_no_data_loss() {
   local source_beads="$1" audit_log="$2"
   local created listed
-  created=$(grep -c '^CREATED' "$audit_log" 2>/dev/null || echo 0)
+  # WR-02 fix: `grep -c PAT file || echo 0` produces a multi-line "0\n0" when
+  # the file is empty (grep prints "0" then exits 1, then `|| echo 0` appends
+  # another "0"). The downstream `[ "$created" -le "$listed" ]` then errors
+  # with "integer expression expected" under set -uo pipefail. Use awk which
+  # always emits exactly one numeric line including 0.
+  created=$(awk '/^CREATED/{c++} END{print c+0}' "$audit_log" 2>/dev/null)
+  created=${created:-0}
   listed=$(BEADS_DIR="$source_beads" bd list --status=all --json 2>/dev/null | jq 'length' 2>/dev/null || echo 0)
+  listed=${listed:-0}
   if [ "$created" -le "$listed" ] && [ "$created" -gt 0 ]; then
     __assert_pass "Invariant 1 (no data loss): created=$created listed=$listed"
     return 0
@@ -53,8 +60,11 @@ assert_no_data_loss() {
 assert_no_id_collision() {
   local audit_log="$1"
   local created uniq
-  created=$(grep -c '^CREATED' "$audit_log" 2>/dev/null || echo 0)
-  uniq=$(awk '$1=="CREATED"{print $2}' "$audit_log" 2>/dev/null | sort -u | wc -l)
+  # WR-02 fix: same multi-line "0\n0" hazard as assert_no_data_loss.
+  created=$(awk '/^CREATED/{c++} END{print c+0}' "$audit_log" 2>/dev/null)
+  created=${created:-0}
+  uniq=$(awk '$1=="CREATED"{print $2}' "$audit_log" 2>/dev/null | sort -u | wc -l | tr -d ' ')
+  uniq=${uniq:-0}
   if [ "$created" -gt 0 ] && [ "$created" -eq "$uniq" ]; then
     __assert_pass "Invariant 2 (no ID collision): created=$created unique=$uniq"
     return 0
