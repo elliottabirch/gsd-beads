@@ -52,7 +52,14 @@ tmp="$(mktemp)"
 # the happy path clears the trap and removes $fragment_resolved
 # explicitly so the post-Step-3 environment is unchanged.
 trap 'rm -f "$fragment_resolved" "$tmp"' EXIT
-sed "s|\$CLAUDE_PROJECT_DIR/.claude/hooks|$HOOKS_DEST|g" "$FRAGMENT" > "$fragment_resolved"
+# WR-02 fix: pre-escape sed-replacement metacharacters in $HOOKS_DEST.
+# In sed's replacement string the characters `\`, `&`, and the chosen
+# delimiter `|` are special. Most posix $HOME values are safe, but a
+# pathological value (e.g., HOME=/tmp/build|1, or a misconfigured WSL
+# import like HOME=/c\\Users\\me) would silently produce a broken
+# settings.json. Escaping the replacement closes the footgun.
+hooks_dest_escaped=$(printf '%s' "$HOOKS_DEST" | sed 's/[\&|]/\\&/g')
+sed "s|\$CLAUDE_PROJECT_DIR/.claude/hooks|$hooks_dest_escaped|g" "$FRAGMENT" > "$fragment_resolved"
 jq -s '
 .[0] as $existing | .[1] as $fragment |
 ($existing.hooks // {}) as $eh | ($fragment.hooks // {}) as $fh |
