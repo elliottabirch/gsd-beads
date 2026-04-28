@@ -636,27 +636,27 @@ for (const [cmd, h] of Object.entries(BEADS_OVERRIDES)) {
 
 ## Open Questions
 
-1. **Should D-03 (bd recipe distribution) be revised in light of Pitfall 1 above?**
+1. **Should D-03 (bd recipe distribution) be revised in light of Pitfall 1 above?** *(RESOLVED — D-03/D-04/D-05 revised in 02-CONTEXT.md per Pitfall 1; install.sh in Plan 02-05 is canonical, recipe is informational pointer)*
    - What we know: bd custom recipes are single-file template writers, not multi-file installers
    - What's unclear: Is the user OK shifting to `git clone gsd-beads && ./install.sh`? Or should the recipe stay for discovery (`bd setup --list`) while a curl-pipe-bash fills the gap?
    - Recommendation: Surface this in the planner's pre-plan checklist; ask the user to confirm before 02-05 is written. The planner should NOT write a plan that says "recipe runs the install script" — that doesn't work.
 
-2. **What's the dolt_database prefix policy for the install script?**
+2. **What's the dolt_database prefix policy for the install script?** *(RESOLVED — Plan 02-05 install.sh uses bd's auto-derived prefix (directory name) for greenfield `bd init --non-interactive --skip-agents`; Spike 004's --from-jsonl --prefix bootstrap pattern is documented as a separate utility per recommendation)*
    - What we know: Spike 004 found `bd init --from-jsonl --prefix <X>` is mandatory for fresh-clone bootstrap; `<X>` reads from `.beads/metadata.json`'s `dolt_database` field
    - What's unclear: For greenfield `bd init --non-interactive --skip-agents` (no `--from-jsonl`), does the install script need to set a specific `--prefix`? Default uses directory name.
    - Recommendation: For Plan 02-05, default to bd's auto-derived prefix (directory name). Document the fresh-clone bootstrap script (Spike 004) as a separate small utility for users cloning a beads-managed project.
 
-3. **Where exactly does `wrapMutation` live in code?**
+3. **Where exactly does `wrapMutation` live in code?** *(RESOLVED — Plan 02-03 places wrap-mutation in `bin/wrap-mutation.mjs`; spy-based snapshot test in `tests/shadow-tests/wrap-mutation.test.mjs` per W2 fix)*
    - What we know: D-09 says ~30 lines helper + 13 wrapping calls
    - What's unclear: Is the helper inline in `gsd-sdk-shadow.mjs` or in a separate `lib/wrap-mutation.mjs`?
    - Recommendation: Plan 02-03 — separate module `bin/wrap-mutation.mjs` so it's unit-testable independently. Snapshot tests live in `tests/shadow-tests/wrap-mutation.test.mjs`.
 
-4. **Test fixture size for E2E (Plan 02-06)?**
+4. **Test fixture size for E2E (Plan 02-06)?** *(RESOLVED — Plan 02-06 specifies two fixtures: 7-bead minimal in tests/fixtures/bd-helpers/3-level-hierarchy.sh + 50-bead perf in tests/e2e/fixtures/scale-50-bead.sh)*
    - What we know: E2E builds "a 3-level hierarchy" (CONTEXT.md specifics)
    - What's unclear: How many phases / tasks? 3-level minimal (1 req → 2 phases → 3 tasks each = 7 beads) is fast but doesn't catch the bd-sync latency issue (Pitfall 3).
    - Recommendation: Plan 02-06 has TWO fixtures: a "minimal" 7-bead happy-path and a "scale" 50-bead fixture for performance assertions.
 
-5. **Should the install script support both PATH locations (`~/.local/bin/gsd-sdk` AND PATH-precedence-aware fallback)?**
+5. **Should the install script support both PATH locations (`~/.local/bin/gsd-sdk` AND PATH-precedence-aware fallback)?** *(RESOLVED — Plan 02-05 chooses warn-only: detect + warn + document; do NOT auto-fix `~/.profile` per RESEARCH.md A5 / T-02-08 disposition. Plan 02-06 covers both POSIX (Linux/WSL) and macOS via the in-fixture mktemp pattern.)*
    - What we know: A5 above flags Volta-PATH-ordering as a real install gotcha
    - What's unclear: Is patching `~/.profile` automatically (line addition) acceptable, or do we want explicit user opt-in?
    - Recommendation: Plan 02-05 detects + warns; documents fix in install output; does NOT modify `~/.profile` automatically. User decision area.
