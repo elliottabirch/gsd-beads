@@ -124,18 +124,45 @@ else
   _fail "CASE 3.a: bare worktree record NOT observable — fixture broken"
 fi
 
-# CASE 3.b: install.sh's awk parser contains the bare-skip rule (grep-level guard).
-if grep -F '/^bare$/' "$REPO_ROOT/install.sh" >/dev/null; then
-  _pass "CASE 3.b: install.sh awk parser contains bare-skip rule"
-else
-  _fail "CASE 3.b: install.sh awk parser missing bare-skip rule"
-fi
+# WR-04 fix: behavioral verification of the awk parser.
+# Previously CASE 3.b/3.c only grep'd install.sh's source for the literal
+# `/^bare$/` / `/^prunable/` patterns — a code-presence check, not a
+# behavior check. A future refactor that rewrites the matcher
+# (e.g. `/^(bare|prunable)/`) or moves it to a helper would fail the
+# old test for the wrong reason; conversely, swapping `next` for `print`
+# in the matcher would still pass it. Now we extract the parser block
+# from install.sh and run it end-to-end against the real bare-clone
+# porcelain output, asserting only non-bare paths are emitted.
 
-# CASE 3.c: install.sh's awk parser contains the prunable-skip rule.
-if grep -F '/^prunable/' "$REPO_ROOT/install.sh" >/dev/null; then
-  _pass "CASE 3.c: install.sh awk parser contains prunable-skip rule"
+# Extract the canonical awk parser block from install.sh (lines between the
+# `worktree list --porcelain | awk '` opener and the closing `'`).
+parser_awk=$(awk '
+  /worktree list --porcelain/ && /awk/ { in_awk = 1; next }
+  in_awk && /^[[:space:]]*'\''[[:space:]]*\|/ { exit }
+  in_awk { print }
+' "$REPO_ROOT/install.sh")
+
+if [ -z "$parser_awk" ]; then
+  _fail "CASE 3.b/3.c: could not extract awk parser block from install.sh"
 else
-  _fail "CASE 3.c: install.sh awk parser missing prunable-skip rule"
+  porcelain=$(git -C "$sandbox3/source-bare" worktree list --porcelain)
+  parser_out=$(printf '%s\n' "$porcelain" | awk "$parser_awk")
+
+  # CASE 3.b: parser must NOT emit the bare repo's path.
+  if printf '%s\n' "$parser_out" | grep -Fxq "$sandbox3/source-bare"; then
+    _fail "CASE 3.b: install.sh awk parser emitted bare path (expected skip)"
+  else
+    _pass "CASE 3.b: install.sh awk parser skips bare worktree record"
+  fi
+
+  # CASE 3.c: parser MUST still emit the linked worktree (sanity: it is not
+  # over-skipping). This guards the tests against a regression where the
+  # parser silently drops everything.
+  if printf '%s\n' "$parser_out" | grep -Fxq "$sandbox3/wt-from-bare"; then
+    _pass "CASE 3.c: install.sh awk parser emits linked worktree from bare clone"
+  else
+    _fail "CASE 3.c: install.sh awk parser missed linked worktree (out: $parser_out)"
+  fi
 fi
 
 echo ""
