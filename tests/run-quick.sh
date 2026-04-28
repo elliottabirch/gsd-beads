@@ -13,5 +13,7 @@ case "$component" in
     bash "tests/install-tests/$component.test.sh" ;;
   auto-config|append-idempotency)
     bash "tests/worktree-tests/$component.test.sh" ;;
+  cross-worktree-sim)
+    bash "tests/cross-worktree/simulation.sh" ;;
   *) echo "unknown component: $component"; exit 2 ;;
 esac
