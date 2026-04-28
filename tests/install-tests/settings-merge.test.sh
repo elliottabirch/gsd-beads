@@ -194,6 +194,93 @@ else
   _fail "CASE 5 (W6): expected pre=1 post=1 (different matchers), got pre=$pre_count5 post=$post_count5"
 fi
 
+# CASE 6 (Gap 1 fix): end-to-end regression guard against install.sh.
+# Runs `bash install.sh` in a sandboxed HOME and asserts the merged
+# ~/.claude/settings.json has hook paths substituted (no $CLAUDE_PROJECT_DIR
+# literals) and the on-disk settings.fragment.json is unchanged.
+SANDBOX="$(mktemp -d)"
+SAVED_HOME="$HOME"
+SAVED_PWD="$PWD"
+{
+  # Sandbox setup: pretend $HOME is a fresh user dir.
+  export HOME="$SANDBOX"
+  mkdir -p "$HOME/.claude" "$HOME/.local/bin"
+  echo '{}' > "$HOME/.claude/settings.json"
+
+  # When the test runs install.sh from $REPO_ROOT, $PWD equals $REPO, so
+  # install.sh's Step 6 predicate `[ "$PWD" != "$REPO" ]` evaluates false
+  # and Step 6 is skipped regardless of .beads/ presence in the repo root.
+  # Tolerate Step 5 bd-remember failures (no bd init in sandbox) by capturing
+  # install.sh's exit code separately — CASE 6 only asserts post-Step-3
+  # state, not bd-memory state, but a non-zero exit BEFORE Step 3 would
+  # leave the pre-seeded {} baseline intact and let 6a-6d pass vacuously.
+  cd "$REPO_ROOT"
+
+  # Capture install.sh exit code separately so vacuous passes are caught
+  install_rc=0
+  bash install.sh >/dev/null 2>&1 || install_rc=$?
+
+  # Sentinel: Step 3 must have produced at least one hook entry, otherwise
+  # all four sub-tests below would pass vacuously on the pre-seeded {} baseline.
+  hook_count=$(jq '[.hooks // {} | .. | .command? // empty] | length' "$HOME/.claude/settings.json" 2>/dev/null || echo 0)
+  if [ "$install_rc" -ne 0 ] && [ "$hook_count" -eq 0 ]; then
+    echo "FAIL: install.sh exited $install_rc and produced no hook entries — sub-tests would pass vacuously"
+    rm -rf "$SANDBOX"
+    HOME="$SAVED_HOME"
+    exit 1
+  fi
+  if [ "$hook_count" -lt 1 ]; then
+    echo "FAIL: install.sh Step 3 deep-merge produced 0 hook entries (expected >= 1) — vacuous-pass guard tripped"
+    rm -rf "$SANDBOX"
+    HOME="$SAVED_HOME"
+    exit 1
+  fi
+
+  # Test 6a: zero literal $CLAUDE_PROJECT_DIR survivors in merged settings.
+  literal_count6="$(jq -r '[.. | .command? // empty] | .[]' "$HOME/.claude/settings.json" \
+    | grep -c -F '$CLAUDE_PROJECT_DIR' || true)"
+  if [ "$literal_count6" = "0" ]; then
+    _pass "CASE 6a: zero literal \$CLAUDE_PROJECT_DIR in merged hook commands (post-install.sh)"
+  else
+    _fail "CASE 6a: expected 0 \$CLAUDE_PROJECT_DIR literals in $HOME/.claude/settings.json, got $literal_count6"
+  fi
+
+  # Test 6b: every hook command resolves under sandboxed $HOME/.claude/hooks/.
+  # Filter to commands containing "hooks/" then assert all start with $HOME/.claude/hooks/.
+  bad_paths6="$(jq -r '[.. | .command? // empty] | .[] | select(contains("hooks/"))' "$HOME/.claude/settings.json" \
+    | grep -v "^$HOME/.claude/hooks/" || true)"
+  if [ -z "$bad_paths6" ]; then
+    _pass "CASE 6b: all hook commands resolve under $HOME/.claude/hooks/ (sandboxed install)"
+  else
+    _fail "CASE 6b: hook commands not under $HOME/.claude/hooks/ — got: $bad_paths6"
+  fi
+
+  # Test 6c (real regression guard): on-disk settings.fragment.json is unchanged.
+  # If install.sh ever writes back to the fragment, this fails. The fragment
+  # path here is $REPO_ROOT/settings.fragment.json (the gsd-beads repo file,
+  # not anything in the sandbox).
+  if git -C "$REPO_ROOT" diff --exit-code -- settings.fragment.json >/dev/null 2>&1; then
+    _pass "CASE 6c: settings.fragment.json unchanged on disk after install.sh end-to-end"
+  else
+    _fail "CASE 6c: install.sh modified settings.fragment.json on disk — substitution must be in-flight only"
+  fi
+
+  # Test 6d (Warning #2 reinforcement, post-Step-3 invariant):
+  # Re-states 6a as the regression-permanent invariant for Warning #2.
+  # Identical assertion mechanism but distinct test name for traceability.
+  literal_count6d="$(jq -r '[.. | .command? // empty] | .[]' "$HOME/.claude/settings.json" \
+    | grep -c -F '$CLAUDE_PROJECT_DIR' || true)"
+  if [ "$literal_count6d" = "0" ]; then
+    _pass "CASE 6d: post-Step-3 settings.json has zero \$CLAUDE_PROJECT_DIR placeholders (Warning #2 invariant)"
+  else
+    _fail "CASE 6d: post-Step-3 settings.json contains $literal_count6d \$CLAUDE_PROJECT_DIR placeholders"
+  fi
+}
+# Restore environment regardless of test outcome.
+export HOME="$SAVED_HOME"
+cd "$SAVED_PWD"
+rm -rf "$SANDBOX"
+
 echo ""
 echo "Passed: $pass / $((pass + fail))"
 [ "$fail" -eq 0 ]
