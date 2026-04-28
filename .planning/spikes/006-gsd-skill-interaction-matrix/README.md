@@ -3,7 +3,7 @@ spike: 006
 name: gsd-skill-interaction-matrix
 type: standard
 validates: "Given the full GSD skill + agent ecosystem (118 files: 85 skills + 33 agents), when each is classified by its interaction with state-bearing markdown paths (.planning/ROADMAP.md, .planning/REQUIREMENTS.md, .planning/todos/**, .planning/seeds/**), then we know exactly which need /gsd-beads-* substitutes (BLOCKS), which need format-compatible regen (READS), and which are unaffected (MENTIONS)."
-verdict: VALIDATED-WITH-FINDINGS
+verdict: VALIDATED-WITH-FINDINGS (substitutes downgraded to OPTIONAL under Architecture Y1, Spike 013)
 related: [001, 002]
 tags: [gsd-ecosystem, hooks, skill-inventory, substitution-list, scope-expansion]
 ---
@@ -44,7 +44,19 @@ detail and classified by:
 
 ## The Matrix
 
-### BLOCKS — 13 skills/agents (need `/gsd-beads-*` substitutes)
+### BLOCKS — 13 skills/agents (substitutes OPTIONAL under Y1)
+
+**Note (post-Spike 013):** With Architecture Y1 (shadow gsd-sdk binary)
+adopted, these 13 upstream skills work TRANSPARENTLY in beads-managed
+projects — their `gsd-sdk query` calls route through our shadow to
+bd-backed handlers. Substitutes are no longer load-bearing; they could
+be retained as explicit-aliases (`/gsd-beads-add-phase` runs the same
+flow but is explicit about the backend) but the upstream skill names
+work too. The matrix below remains useful as a reference of what
+mutation commands each skill performs, which informs the Y1 shadow's
+handler set.
+
+
 
 These hit our PreToolUse(Edit|Write) hook from Spike 001 and would be
 denied with our redirect message. Each needs a substitute that mutates

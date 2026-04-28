@@ -3,7 +3,7 @@ spike: 010
 name: bd-aware-gsd-agents
 type: standard
 validates: "Given the architecture's 'no fork' rule (REQ-02: GSD core unmodified) and Spike 006's finding of 13 BLOCKS skills, when probing whether upstream agents can be made bd-aware via in-prompt detection or runtime override, then we know the boundary: hooks + bd-memory priming guarantees, individual upstream agents cannot be modified, but session-level priming via bd memories is a soft path that reduces hard-block frequency."
-verdict: VALIDATED-WITH-CONSTRAINTS
+verdict: VALIDATED-WITH-CONSTRAINTS (3-layer model simplified to 2-layer under Architecture Y1, Spike 013)
 related: [001, 002, 006]
 tags: [gsd-ecosystem, agents, in-prompt, no-fork-boundary]
 ---
@@ -85,6 +85,28 @@ command and hits a confusing block partway through." With both:
   and agents should use.
 
 The combination is robust. Drop any one and there's a gap.
+
+## Post-Spike-013 update
+
+With **Architecture Y1 (shadow gsd-sdk binary)** adopted in Spike 013,
+the 3-layer model simplifies to **2 layers**:
+
+1. **Transparent backend (shadow gsd-sdk):** state-bearing mutations
+   from upstream skills route through to bd automatically. No agent
+   priming required for vocabulary routing — agents call upstream
+   commands and get bd-backed semantics for free.
+2. **Defensive Edit/Write hook:** still required, blocks direct edits
+   to state-bearing markdown. The Spike 012 PreToolUse(Bash, "Bash(gsd-sdk *)")
+   hook becomes a defensive backup for any new upstream mutation
+   commands the shadow doesn't yet override.
+
+bd-memory priming is still useful for vocabulary visibility (`bd memories
+gsd-beads` shows the conventions, surfaced via `bd prime`) but is no
+longer required — agents don't need to know about `/gsd-beads-*`
+substitutes because they don't need to use them.
+
+The **substitute path is no longer required** as a third layer; it
+becomes an optional UX enhancement.
 
 ## Verdict
 

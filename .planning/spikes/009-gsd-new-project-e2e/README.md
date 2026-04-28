@@ -3,7 +3,7 @@ spike: 009
 name: gsd-new-project-e2e
 type: standard
 validates: "Given /gsd-new-project as the canonical fresh-start flow (writes REQUIREMENTS.md + ROADMAP.md via gsd-roadmapper), when designing the /gsd-beads-new-project substitute, then we know exactly which steps stay native (PROJECT.md, research/, STATE.md), which translate to bd operations + regen (REQUIREMENTS.md, ROADMAP.md), and where the orchestration handoffs happen."
-verdict: VALIDATED-WITH-DESIGN
+verdict: VALIDATED-WITH-DESIGN (substitute downgraded to OPTIONAL under Architecture Y1, Spike 013)
 related: [001, 002, 006, 007]
 tags: [gsd-ecosystem, e2e, onboarding, substitute-design]
 ---
@@ -116,9 +116,28 @@ using the -beads- versions directly."
 Auto-surfaced every session via `bd prime`'s memories section. Idempotent
 on re-install: `bd forget gsd-beads:vocabulary` first if reseeding.
 
+## Post-Spike-013 update
+
+With **Architecture Y1 (shadow gsd-sdk binary)** adopted in Spike 013,
+the substitute skill described above becomes **optional**. Upstream
+`/gsd-new-project` works transparently:
+
+- The skill spawns `gsd-roadmapper` agent.
+- `gsd-roadmapper` runs `gsd-sdk query phase.add ...` for each phase.
+- Our shadow at `~/.local/bin/gsd-sdk` intercepts each `phase.add`,
+  routes to bd, returns the right shape.
+- The skill's narrative writes (PROJECT.md, research/, STATE.md) are
+  unaffected.
+- Result: upstream `/gsd-new-project` produces a beads-backed roadmap
+  with no skill changes.
+
+A `/gsd-beads-new-project` skill could still be retained as an
+explicit-alias entry point that primes vocabulary memories at start —
+useful for clean UX but no longer load-bearing.
+
 ## Verdict
 
-**VALIDATED-WITH-DESIGN ✓**
+**VALIDATED-WITH-DESIGN ✓** (Y1 makes the substitute optional)
 
 The substitute path is concrete: 7 unchanged steps + 3 bd-mediated
 steps. Total LOC for `/gsd-beads-new-project` is approximately

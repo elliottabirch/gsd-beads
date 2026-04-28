@@ -1,0 +1,352 @@
+{
+  "passed": 43,
+  "failed": 0,
+  "total": 43,
+  "generated_at": "2026-04-28T04:58:23Z",
+  "cases": [
+    {
+      "name": "deny-phase.add",
+      "cmd": "gsd-sdk query phase.add 'Phase 5: New feature'",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase.add  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase add (space alias)",
+      "cmd": "gsd-sdk query phase add 'Phase 5'",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase add writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase.add-batch",
+      "cmd": "gsd-sdk query phase.add-batch --json @phases.json",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase.add-batch  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase add-batch alias",
+      "cmd": "gsd-sdk query phase add-batch --json @phases.json",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase add-batch writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase.insert",
+      "cmd": "gsd-sdk query phase.insert --after 2 'Critical fix'",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase.insert  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase insert alias",
+      "cmd": "gsd-sdk query phase insert --after 2 'Critical fix'",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase insert writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase.remove",
+      "cmd": "gsd-sdk query phase.remove 5",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase.remove  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase remove alias",
+      "cmd": "gsd-sdk query phase remove 5",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase remove writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase.complete",
+      "cmd": "gsd-sdk query phase.complete 3",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase.complete  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase complete alias",
+      "cmd": "gsd-sdk query phase complete 3",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase complete writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase.scaffold",
+      "cmd": "gsd-sdk query phase.scaffold 5",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase.scaffold  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phase scaffold alias",
+      "cmd": "gsd-sdk query phase scaffold 5",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase scaffold writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phases.clear",
+      "cmd": "gsd-sdk query phases.clear --confirm",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phases.clear  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-complete-milestone or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-phases.archive",
+      "cmd": "gsd-sdk query phases.archive 1-4 --milestone v1.0",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phases.archive  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-complete-milestone or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-roadmap.update-plan",
+      "cmd": "gsd-sdk query roadmap.update-plan-progress --plan 03-02 --status complete",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query roadmap.update-plan-progress  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use bd-sync.sh handles regen automatically; use `bd` directly to mutate. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-roadmap update alias",
+      "cmd": "gsd-sdk query roadmap update-plan-progress --plan 03-02",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query roadmap update-plan-progress writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use bd-sync.sh handles regen automatically; use `bd` directly to mutate. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-roadmap.annotate",
+      "cmd": "gsd-sdk query roadmap.annotate-dependencies",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query roadmap.annotate-dependencies  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use bd-sync.sh handles regen automatically; use `bd` directly to mutate. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-requirements.mark",
+      "cmd": "gsd-sdk query requirements.mark-complete AUTH-01",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query requirements.mark-complete  writes to REQUIREMENTS.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-complete-milestone or use `bd close <req-id>`. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-requirements mark alias",
+      "cmd": "gsd-sdk query requirements mark-complete AUTH-01",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query requirements mark-complete writes to REQUIREMENTS.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-complete-milestone or use `bd close <req-id>`. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-todo.complete",
+      "cmd": "gsd-sdk query todo.complete TODO-042",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query todo.complete  writes to .planning/todos/ which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-check-todos or use `bd close <todo-id>`. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-todo complete alias",
+      "cmd": "gsd-sdk query todo complete TODO-042",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query todo complete writes to .planning/todos/ which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-check-todos or use `bd close <todo-id>`. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-milestone.complete",
+      "cmd": "gsd-sdk query milestone.complete v1.0",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query milestone.complete  writes to ROADMAP.md + REQUIREMENTS.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-complete-milestone (handles dual-write via bd-sync regen). Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-milestone alias",
+      "cmd": "gsd-sdk query milestone complete v1.0",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query milestone complete writes to ROADMAP.md + REQUIREMENTS.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-complete-milestone (handles dual-write via bd-sync regen). Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-list.todos",
+      "cmd": "gsd-sdk query list.todos --json",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-progress",
+      "cmd": "gsd-sdk query progress",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-config-get",
+      "cmd": "gsd-sdk query config-get commit_docs",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-audit-open",
+      "cmd": "gsd-sdk query audit-open --json",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-decisions",
+      "cmd": "gsd-sdk query decisions",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-state.update",
+      "cmd": "gsd-sdk query state.update --phase 3",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-state.patch",
+      "cmd": "gsd-sdk query state.patch --field foo",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-frontmatter.set",
+      "cmd": "gsd-sdk query frontmatter.set PLAN.md status active",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-config-set",
+      "cmd": "gsd-sdk query config-set commit_docs true",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-commit",
+      "cmd": "gsd-sdk query commit 'docs: update'",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-template.fill",
+      "cmd": "gsd-sdk query template.fill plan 03-02",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-workstream.create",
+      "cmd": "gsd-sdk query workstream.create feature-x",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-intel.snapshot",
+      "cmd": "gsd-sdk query intel.snapshot",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-ls",
+      "cmd": "ls -la",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-bd-list",
+      "cmd": "bd list",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-grep",
+      "cmd": "grep -r foo .",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-gsd-sdk-no-query",
+      "cmd": "gsd-sdk init",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-gsd-sdk-help",
+      "cmd": "gsd-sdk --help",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "allow-gsd-sdk-with-flags",
+      "cmd": "gsd-sdk --project-dir /x query progress",
+      "expect": "allow",
+      "got": "allow",
+      "reason": "",
+      "status": "PASS"
+    },
+    {
+      "name": "deny-with-flags",
+      "cmd": "gsd-sdk --project-dir /x query phase.add 'New phase'",
+      "expect": "deny",
+      "got": "deny",
+      "reason": "gsd-sdk query phase.add  writes to ROADMAP.md which is generated from beads in this gsd-beads-managed project. Use /gsd-beads-add-phase, /gsd-beads-insert-phase, /gsd-beads-complete-milestone, or use `bd` directly. Run `bd-sync.sh` to regenerate the markdown view if needed.",
+      "status": "PASS"
+    }
+  ]
+}
