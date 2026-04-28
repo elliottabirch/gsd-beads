@@ -25,7 +25,7 @@ The full skill + hook + script implementation. Gated on Phase 1 success.
 Plans:
 - [x] 02-01-bd-helpers-PLAN.md — `cascade-loop.sh`, `regen-roadmap.sh`, `regen-requirements.sh` (REQ-01)
 - [x] 02-02-hooks-PLAN.md — `block-state-md.sh`, `bd-sync.sh`, `block-gsd-sdk-mutation.sh` + `settings.fragment.json` + 3 hook test suites (REQ-04, REQ-07)
-- [ ] 02-03-shadow-binary-PLAN.md — `gsd-sdk-shadow.mjs` + 13 bd-backed handlers + `wrap-mutation.mjs` (REQ-01, REQ-02, REQ-04)
+- [x] 02-03-shadow-binary-PLAN.md — `gsd-sdk-shadow.mjs` + 13 bd-backed handlers + `wrap-mutation.mjs` (REQ-01, REQ-02, REQ-04)
 - [x] 02-04-worktree-init-PLAN.md — `worktree-post-checkout.sh` sentinel-marker shim + idempotency tests (REQ-03)
 - [ ] 02-05-install-script-PLAN.md — `install.sh` self-contained installer + bd memory seeding + symlink (REQ-02, REQ-06, REQ-08)
 - [ ] 02-06-e2e-smoke-test-PLAN.md — fresh fixture E2E + perf gate + concurrent-merge + post-gsd-update + bd-ready (REQ-01..REQ-08)
