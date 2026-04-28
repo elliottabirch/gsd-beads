@@ -259,7 +259,15 @@ SAVED_PWD="$PWD"
   # If install.sh ever writes back to the fragment, this fails. The fragment
   # path here is $REPO_ROOT/settings.fragment.json (the gsd-beads repo file,
   # not anything in the sandbox).
-  if git -C "$REPO_ROOT" diff --exit-code -- settings.fragment.json >/dev/null 2>&1; then
+  # WR-03 fix: compare working tree against HEAD, not against the index.
+  # The earlier `git diff --exit-code` (working tree vs index) would pass
+  # vacuously if a future change had `git add`-ed a modified
+  # settings.fragment.json before this test ran — install.sh could then
+  # corrupt the working-tree copy in a way that exactly reverses the
+  # staged change and the test would not notice. `git diff HEAD --`
+  # ignores the index and catches working-tree mutations regardless of
+  # staging state.
+  if git -C "$REPO_ROOT" diff --exit-code HEAD -- settings.fragment.json >/dev/null 2>&1; then
     _pass "CASE 6c: settings.fragment.json unchanged on disk after install.sh end-to-end"
   else
     _fail "CASE 6c: install.sh modified settings.fragment.json on disk — substitution must be in-flight only"
