@@ -1,0 +1,13 @@
+✓ gsd-beads-spike-sandbox-b14 ● P0 requirement REQ-042: Email/password auth
+├── ✓ gsd-beads-spike-sandbox-8jo ● P1 phase Phase 13: Auth UI
+│   ├── ✓ gsd-beads-spike-sandbox-6ar ● P2 task Login form
+│   └── ✓ gsd-beads-spike-sandbox-v7p ● P2 task Error states
+└── ✓ gsd-beads-spike-sandbox-y8u ● P1 phase Phase 12: Auth backend
+    ├── ✓ gsd-beads-spike-sandbox-5zt ● P2 task Session storage
+    ├── ✓ gsd-beads-spike-sandbox-djc ● P2 task Password hashing
+    └── ✓ gsd-beads-spike-sandbox-y6h ● P2 task Login endpoint
+
+--------------------------------------------------------------------------------
+Total: 8 issues (0 open, 0 in progress)
+
+Status: ○ open  ◐ in_progress  ● blocked  ✓ closed  ❄ deferred
