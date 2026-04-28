@@ -60,13 +60,17 @@ const registry = createRegistry();
 ```
 There's no parameter to inject an externally-modified registry into the
 existing main(). To use Y1, we either:
-- (a) Replicate the dispatch loop ourselves (~50 lines copying from
-  cli.js after the createRegistry line)
-- (b) **Intercept argv at the binary boundary, route state-bearing
-  mutations to our handlers, spawnSync upstream for everything else**
+- (a) **Build our own dispatch using the SDK's exported building blocks**
+  (createRegistry, resolveQueryArgv, extractField). We import the
+  primitives, register overrides, dispatch through the SDK's machinery.
+  ~50 lines of orchestration; reuses ALL of the SDK's typed-handler
+  contract.
+- (b) **Intercept argv at the binary boundary**, route state-bearing
+  mutations to our hand-rolled handlers, spawnSync upstream for
+  everything else. Simpler but rebuilds argv parsing and result-shape
+  assembly ourselves.
 
-Approach (b) is much simpler — we don't import any internal SDK
-machinery. Just argv routing.
+Both variants validated below; (a) is the canonical design.
 
 ## How to Run
 
@@ -149,12 +153,69 @@ command`. Debugging showed this is an UPSTREAM quirk —
 after `<cmd>` (or use cwd-based detection). Not a Y1 issue. Confirmed by
 calling upstream directly with the same argv ordering.
 
+## Iteration 5 — registry-override POC (canonical variant)
+
+User asked: *"so we determined that we cannot hook into the gsd-sdk
+package, and implement our own backend?"* — and I'd been imprecise. We
+CAN hook into the package; the argv-intercept POC was a shortcut that
+skipped the SDK's dispatch primitives.
+
+Built `gsd-sdk-shadow-v2.mjs` — same shape but using the SDK's own
+machinery:
+
+```javascript
+import { createRegistry } from 'get-shit-done-cc/sdk/dist/query/index.js';
+import { resolveQueryArgv, extractField } from 'get-shit-done-cc/sdk/dist/query/registry.js';
+
+const registry = createRegistry();
+registry.register('phase.add', beadsPhaseAdd);   // ← OUR handler is now first-class
+// ... 12 more state-bearing overrides
+
+const matched = resolveQueryArgv(queryArgv, registry);   // SDK handles argv parsing
+const result = await registry.dispatch(matched.cmd, matched.args, projectDir);
+console.log(JSON.stringify(result));
+```
+
+**Empirical validation (all 6 tests pass):**
+
+| Test | Result |
+|---|---|
+| Not-a-query → passthrough | ✓ `--help` delegates to upstream |
+| Non-beads project → passthrough | ✓ `phase.add` outside .beads/ falls through, upstream handles |
+| `phase.add` (dotted) on beads project | ✓ Our handler runs; bead created with `gsd:phase` label; `{"data":{"phase_id":"...","backend":"beads"}}` returned |
+| `phase add` (space-aliased) on beads project | ✓ SDK's `resolveQueryArgv` matches space-form via longest-prefix; our handler runs |
+| Read-only `progress` on beads project | ✓ Dispatches through SDK to UNMODIFIED upstream handler; canonical project-status JSON returned |
+| `--pick phase_id` on `phase.add` | ✓ SDK's `extractField` extracts just the ID — no extra code required |
+
+**Concrete advantages over argv-intercept:**
+
+- `resolveQueryArgv` handles dotted (`phase.add`) and space-aliased
+  (`phase add`) forms automatically via longest-prefix scan — we don't
+  write argv-parsing regex
+- `--pick` extraction is free via `extractField()`
+- Our handlers return `QueryResult { data }` shape — same as upstream
+- When upstream adds new mutation commands, our shadow's argv parsing
+  doesn't need to change — only the handler set
+- Handler signature (`(args, projectDir) => Promise<QueryResult>`) is
+  the canonical typed interface; we benefit from any improvements
+  upstream makes to it
+
+**Trade-off acknowledged:** the SDK's `createRegistry()` wraps
+`QUERY_MUTATION_COMMANDS` handlers with mutation-event emission AT
+construction time. When we `registry.register('phase.add', ourHandler)`
+AFTER createRegistry returns, our handler replaces the wrapped one and
+loses event emission. Phase 2 should either (a) wrap our handlers
+manually with the same event-emission logic or (b) accept that gsd-beads
+mutations don't emit GSDEvents (relevant for live-dashboard
+observability — out of scope for the MVP single-developer audience).
+
 ## Results
 
-**Verdict: VALIDATED ✓**
+**Verdict: VALIDATED ✓ (registry-override variant is canonical)**
 
-Architecture Y1 (shadow binary, argv-intercept variant) is empirically
-viable. POC demonstrates:
+Architecture Y1 is empirically viable in **both variants**, with the
+registry-override approach (`gsd-sdk-shadow-v2.mjs`) as the canonical
+design. POC demonstrates:
 
 1. **State-bearing mutations route to bd transparently** — upstream
    skills calling `gsd-sdk query phase.add` automatically work in
@@ -210,9 +271,14 @@ bypass the SDK entirely.
 
 ## Files
 
-- `gsd-sdk-shadow.js` — POC shadow binary, ~120 lines. `phase.add` is
-  fully implemented (creates `type=epic + label gsd:phase`); other 12
-  state-bearing commands are stubs.
+- `gsd-sdk-shadow-v2.mjs` — **canonical Y1 design.** ~110 lines.
+  Imports `createRegistry`, `resolveQueryArgv`, `extractField` from the
+  SDK package; registers state-bearing handler overrides; dispatches
+  through the SDK's own machinery. `phase.add` fully implemented; 12
+  stubs for Phase 2.
+- `gsd-sdk-shadow.js` — argv-intercept variant POC. Kept as a working
+  alternative reference; demonstrates the simpler routing path. Phase
+  2 will use v2.
 - This README
-- The live POC sandbox is at `/tmp/spike13-beads/` (with 4 successfully
-  intercepted phase.add calls captured).
+- The live POC sandbox is at `/tmp/spike13-beads/` — 7 phase beads
+  successfully created across both shadow variants (4 via v1, 3 via v2).
