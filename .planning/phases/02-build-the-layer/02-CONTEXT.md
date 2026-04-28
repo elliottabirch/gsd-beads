@@ -68,21 +68,34 @@ fresh machine in one command.
   contains all 13 in one file with shared helpers; per-handler tests
   validate each independently.
 
-### Distribution Mechanism (bd recipe path)
-- **D-03:** **Distribute as a `bd setup --add gsd-beads <path>` recipe.**
-  Spike 002 finding: bd's recipe system supports custom recipes via
-  `bd setup --add <name> <path>`. We register gsd-beads. Install
-  becomes: `bd setup gsd-beads`. Reuses bd's install/uninstall/check
-  infrastructure.
-- **D-04:** **No standalone curl-pipe-bash installer for MVP.** If
-  users have bd, they have the recipe machinery. The recipe IS the
-  installer. (If a future Phase needs a standalone installer for
-  CI/no-bd environments, build it then.)
-- **D-05:** **Recipe contents:** the recipe template includes (a) a
-  shell snippet that runs the install script, (b) the hook fragment
-  pointing at `$CLAUDE_PROJECT_DIR/.claude/hooks/`, (c) the bd memory
-  seeding script. The recipe registration is a one-time per-machine
-  step; the recipe contents apply per-project on `bd setup gsd-beads`.
+### Distribution Mechanism (revised 2026-04-27 from RESEARCH.md Pitfall 1)
+**Note:** D-03/D-04/D-05 below are the **revised decisions** after Phase 2
+research (RESEARCH.md Pitfall 1) empirically verified bd v1.0.3's recipe
+contract: `bd setup --add <name> <path>` registers a destination path,
+and `bd setup <name>` writes bd's bundled canonical template TO that path.
+Custom recipes are single-file template writers — they cannot ship hooks +
+shadow binary + memory seeding. Original D-03/D-04/D-05 were authored
+without this empirical evidence. Original wording preserved in
+DISCUSSION-LOG.md.
+
+- **D-03 (revised):** **bd recipe is a discovery surface, not the installer.**
+  Register gsd-beads via `bd setup --add gsd-beads <path>` so it appears
+  in `bd setup --list` and is bd-native discoverable. The recipe template
+  file contains pointer text directing users to `git clone … && ./install.sh`.
+  The actual install work happens in `install.sh`, not via bd recipe machinery.
+- **D-04 (revised):** **`git clone https://github.com/<owner>/gsd-beads &&
+  ./install.sh` is the canonical install path.** No `curl … | bash` for MVP
+  (security audit overhead not justified for a single-developer audience).
+  Users without bd installed get an explicit error from `install.sh` with
+  install-bd instructions.
+- **D-05 (revised):** **install.sh does all the real work** — hook script
+  install (sentinel-merged into `~/.claude/settings.json`), shadow binary
+  symlink to `~/.local/bin/gsd-sdk` with PATH precedence check, bd memory
+  seeding (`bd remember gsd-beads:*`), worktree post-checkout shim append.
+  The bd recipe template is a small markdown file with discovery/pointer
+  text only (e.g., "gsd-beads ships as a separate repo — `git clone …`").
+  Idempotent: re-running install.sh on an already-installed project
+  refreshes memories + re-symlinks without breaking anything.
 
 ### Substitute Skills (skip entirely)
 - **D-06:** **No `/gsd-beads-*` substitute skills ship in Phase 2.**
@@ -220,10 +233,13 @@ fresh machine in one command.
 <specifics>
 ## Specific Ideas
 
-- **Recipe install command:** ideal target UX is `bd setup gsd-beads`
-  (after one-time `bd setup --add gsd-beads <recipe-path>`). Should be
-  idempotent — re-running on an already-installed project should
-  refresh memories + re-symlink the binary without breaking anything.
+- **Install UX (revised per Pitfall 1):** primary install path is
+  `git clone https://github.com/<owner>/gsd-beads && cd gsd-beads &&
+  ./install.sh`. Secondary discovery surface is `bd setup --add gsd-beads
+  <path>` so the recipe shows up in `bd setup --list`; the recipe
+  template content is a pointer to the git clone instruction. Both
+  paths are idempotent — re-running install.sh refreshes memories +
+  re-symlinks the binary without breaking anything.
 - **Shadow binary location:** symlink to `~/.local/bin/gsd-sdk` (must
   appear before upstream's `~/.volta/bin/gsd-sdk` on PATH). Install
   script verifies PATH ordering and warns if wrong.
