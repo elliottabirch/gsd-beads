@@ -59,16 +59,16 @@ created: 2026-04-27
 | 02-04-02 | 04 | 2 | REQ-03 | T-02-06 | sentinel-marker append idempotent (re-add does not duplicate) | unit | `bash tests/worktree-tests/append-idempotency.test.sh` | ❌ W0 | ⬜ pending |
 | 02-05-W0 | 05 | 0 | REQ-06 | T-02-07 | N/A | Wave 0 | `test -f tests/install-tests/idempotency.test.sh` | ❌ W0 | ⬜ pending |
 | 02-05-01 | 05 | 3 | REQ-06 | T-02-07 | install.sh idempotent — running twice produces zero diff in `~/.claude/settings.json` | unit | `bash tests/install-tests/idempotency.test.sh` | ❌ W0 | ⬜ pending |
-| 02-05-02 | 05 | 3 | REQ-06 | T-02-07 | deep-merge settings.json without clobbering existing user hooks | unit | `bash tests/install-tests/settings-merge.test.sh` | ❌ W0 | ⬜ pending |
+| 02-05-02 | 05 | 3 | REQ-06 | T-02-07 | deep-merge settings.json without clobbering existing user hooks; 5 cases including CASE 5 (different matchers retained — W6 fix) | unit | `bash tests/install-tests/settings-merge.test.sh` | ❌ W0 | ⬜ pending |
 | 02-05-03 | 05 | 3 | REQ-06 | — | bd memory seeding produces 7 keys under `gsd-beads:` namespace | unit | `bash tests/install-tests/memory-seeding.test.sh` | ❌ W0 | ⬜ pending |
 | 02-05-04 | 05 | 3 | REQ-06 | T-02-08 | symlink at `~/.local/bin/gsd-sdk` resolves; warns if PATH-shadowed (Volta trap) | unit | `bash tests/install-tests/path-precedence.test.sh` | ❌ W0 | ⬜ pending |
 | 02-05-05 | 05 | 3 | REQ-02 | T-02-09 | grep guard — install never touches `~/.claude/get-shit-done/` | unit | `bash tests/install-tests/no-gsd-core-mutation.test.sh` | ❌ W0 | ⬜ pending |
 | 02-06-W0 | 06 | 0 | REQ-01..REQ-08 | — | N/A | Wave 0 | `test -f tests/e2e/full-install.smoke.sh` | ❌ W0 | ⬜ pending |
 | 02-06-01 | 06 | 4 | REQ-01..REQ-08 | T-02-10 | E2E: fresh fixture, full install, build hierarchy, cascade fires, regen ROADMAP.md parses | smoke | `bash tests/e2e/full-install.smoke.sh` | ❌ W0 | ⬜ pending |
 | 02-06-02 | 06 | 4 | REQ-04 | — | E2E: 50-bead fixture, bd-sync.sh latency <5s (Pitfall 3 perf gate) | performance | `bash tests/e2e/bd-sync-latency.test.sh` | ❌ W0 | ⬜ pending |
-| 02-06-03 | 06 | 4 | REQ-05 | — | E2E: 2 worktrees writing same bead ID merge without conflict | integration | `bash tests/e2e/concurrent-merge.test.sh` | ❌ W0 | ⬜ pending |
+| 02-06-03 | 06 | 4 | REQ-05 | — | E2E: 2 worktrees concurrently close same bead; both writers commit (non-empty stdout), close_reason ∈ {wt-source, wt-secondary}, no DB corruption (B1 fix — last-writer-wins acceptable per Pitfall 8) | integration | `bash tests/e2e/concurrent-merge.test.sh` | ❌ W0 | ⬜ pending |
 | 02-06-04 | 06 | 4 | REQ-02 | — | E2E: post-`gsd-update`, shadow imports still work | smoke | `bash tests/e2e/post-gsd-update.smoke.sh` | ❌ W0 | ⬜ pending |
-| 02-06-05 | 06 | 4 | REQ-08 | — | E2E: `bd ready` works as-is in beads-managed project | smoke | `bash tests/e2e/bd-ready.smoke.sh` | ❌ W0 | ⬜ pending |
+| 02-06-05 | 06 | 4 | REQ-08, D-07 | — | E2E: `bd ready` works as-is in beads-managed project; CASE 4 (B2 fix) verifies `bd prime` surfaces gsd-beads:vocabulary content per D-07 | smoke | `bash tests/e2e/bd-ready.smoke.sh` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -115,7 +115,7 @@ Wave 0 stubs (must exist BEFORE production code is written so all subsequent tas
 | Shadow handler `phase.add` | 3 paths (beads, non-beads, malformed args) | **6+ cases** | Phase 2 NEW |
 | Shadow handler ×12 others | 3 paths each = 36 | **36+ cases** | Phase 2 NEW |
 | `wrapMutation` helper | 7 prefix branches (template, commit, frontmatter, config, validate, phase, fallback) | **14+ snapshot cases** | Phase 2 NEW |
-| `install.sh` deep-merge | 4 cases (empty, no-overlap, partial-overlap, full-conflict) | **8+ cases** | Phase 2 NEW |
+| `install.sh` deep-merge | 5 cases (empty, no-overlap, partial-overlap, full-conflict, different-matchers — W6 fix CASE 5) | **10+ cases** | Phase 2 NEW |
 | `worktree-post-checkout.sh` append idempotency | 2 cases (first-add, re-add) | **4+ cases** | Phase 2 NEW |
 
 ---
