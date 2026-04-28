@@ -336,7 +336,7 @@ Hook allow output: exit 0 with no stdout (silent).
   <acceptance_criteria>
     - `hooks/block-gsd-sdk-mutation.sh` exists, executable.
     - `grep -c 'phase.add\|phase.add-batch\|phase.insert\|phase.complete\|phase.remove\|phase.scaffold\|phases.clear\|phases.archive\|roadmap.update-plan-progress\|roadmap.annotate-dependencies\|requirements.mark-complete\|todo.complete\|milestone.complete' hooks/block-gsd-sdk-mutation.sh` returns at least 13.
-    - `grep -c '"gsd-sdk "*"query "' hooks/block-gsd-sdk-mutation.sh` returns at least 1 (anchored pattern; T-02-02 mitigation).
+    - `grep -F '*"gsd-sdk "*"query "*' hooks/block-gsd-sdk-mutation.sh` returns at least 1 (anchored case-pattern arm with leading + trailing wildcards as in Spike 012; T-02-02 mitigation; B5 fix — fixed-string match against the literal `*"gsd-sdk "*"query "*)` from the spike source).
     - `grep -c '/gsd-beads-' hooks/block-gsd-sdk-mutation.sh` returns 0 (D-06).
     - `bash -n hooks/block-gsd-sdk-mutation.sh` exits 0.
     - `bash tests/hook-tests/block-gsd-sdk-mutation.test.sh` exits 0 with `Passed: 43 / 43`.
@@ -432,7 +432,7 @@ Hook allow output: exit 0 with no stdout (silent).
     - `grep -c 'regen-requirements\.sh' hooks/bd-sync.sh` returns at least 1.
     - `grep -E 'list\|show\|ready\|memories\|status\|prime' hooks/bd-sync.sh` matches at least once (read-only filter present).
     - `grep -c 'eval' hooks/bd-sync.sh` returns 0 (T-02-03 guard).
-    - `grep -c '"bd "\*' hooks/bd-sync.sh` returns at least 1 (bd prefix gate).
+    - `grep -F '"bd "*)' hooks/bd-sync.sh` returns at least 1 (bd prefix gate; B4 fix — fixed-string match for the literal `"bd "*)` case-pattern arm).
     - `bash -n hooks/bd-sync.sh` exits 0.
     - `bash tests/hook-tests/bd-sync.test.sh` exits 0 with `Passed: 17 / 17` (or matches the case count from Task 1 stub).
   </acceptance_criteria>
@@ -568,3 +568,4 @@ After completion, create `.planning/phases/02-build-the-layer/02-02-SUMMARY.md` 
 - The bd-sync chain to Plan 02-01's scripts
 - Threat mitigations (T-02-01, T-02-02, T-02-03) and the verifying test cases
 </output>
+
