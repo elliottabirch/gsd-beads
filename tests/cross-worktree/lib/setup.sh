@@ -83,10 +83,19 @@ cleanup_sandbox() {
   [ -d "$root" ] || return 0
   # If $root/source exists and is a git repo, prune its worktrees first.
   if [ -d "$root/source/.git" ] || [ -f "$root/source/.git" ]; then
+    # WR-07 fix: compare canonicalized paths so that trailing-slash drift or
+    # symlinks in $root cannot make the source-skip check miss the source repo
+    # and accidentally try to `worktree remove` it. The mktemp paths used by
+    # simulation.sh do not exhibit either issue today, but the bug is dormant
+    # rather than absent. `pwd -P` is portable; `realpath` is GNU-only.
+    local src_canonical
+    src_canonical=$(cd "$root/source" 2>/dev/null && pwd -P) || src_canonical=""
     git -C "$root/source" worktree list --porcelain 2>/dev/null \
       | awk '/^worktree / { print substr($0, 10) }' \
       | while IFS= read -r wt; do
-          [ "$wt" = "$root/source" ] && continue
+          local wt_canonical
+          wt_canonical=$(cd "$wt" 2>/dev/null && pwd -P) || wt_canonical=""
+          [ -n "$wt_canonical" ] && [ "$wt_canonical" = "$src_canonical" ] && continue
           git -C "$root/source" worktree remove --force "$wt" 2>/dev/null || true
         done
   fi
