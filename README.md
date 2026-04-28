@@ -12,4 +12,18 @@ DISCUSSION-LOG.md) is unaffected.
 Distributed via symlinks into `~/.claude/` (skills + scripts + hook fragments).
 Updates to upstream GSD apply cleanly because GSD's source is never touched.
 
-**Status:** design phase. See `.planning/notes/beads-gsd-architecture.md`.
+## Multi-worktree setup
+
+gsd-beads supports git worktrees natively. After
+`git clone && ./install.sh`, run `git worktree add` from the source
+repo and the new worktree auto-configures to share the source repo's
+bead store. No env-var dance, no manual `bd` reconfig.
+
+See [docs/WORKTREES.md](docs/WORKTREES.md) for the full setup
+walkthrough, lifecycle ops (`git worktree remove`, reactivating an
+old path), and troubleshooting (4 documented failure modes with
+one-line recoveries).
+
+macOS users: `brew install flock` is required.
+
+**Status:** Phase 2 shipped (13/13 verified, 2026-04-28). Phase 3 (cross-worktree validation) in progress.
