@@ -216,6 +216,76 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# CASE 6 (Gap 2 fix, REQ-06 / portability): category capitalization is
+# portable — no GNU-only sed \U escape; awk-only pipeline produces correctly
+# capitalized headers on macOS BSD sed and GNU sed alike.
+# ---------------------------------------------------------------------------
+echo ""
+echo "CASE 6: portable category capitalization (no \\U literal, multi-word handled)"
+case6_ok=1
+{
+  fixture=$(mktemp -d)
+  bash "$FIXTURE_BUILDER" "$fixture" >/dev/null 2>&1
+  cd "$fixture"
+  mkdir -p "$fixture/.planning"
+
+  # Add a multi-word category requirement (auth-flow → "Auth Flow")
+  # bd priority range is 0-4 (Rule 1: plan-text said -p 5 but bd rejects)
+  MW_REQ=$(bd q "REQ-077: Multi-word category test" -t epic -p 4)
+  bd label add "$MW_REQ" gsd:requirement >/dev/null 2>&1
+  bd label add "$MW_REQ" req-id:REQ-077 >/dev/null 2>&1
+  bd label add "$MW_REQ" version:v1 >/dev/null 2>&1
+  bd label add "$MW_REQ" category:auth-flow >/dev/null 2>&1
+
+  bash "$REGEN_REQS"
+  reqs=$(cat "$fixture/.planning/REQUIREMENTS.md")
+
+  # Test 1: zero \U literals anywhere in the output
+  ulit_count=$(printf '%s' "$reqs" | grep -c '\\U' || true)
+  if [ "$ulit_count" -ne 0 ]; then
+    case6_ok=0
+    echo "  detail: found $ulit_count occurrences of literal \\U in output (GNU-sed leak)"
+    printf '%s' "$reqs" | grep '\\U' | head -3
+  fi
+
+  # Test 2: multi-word category produces "### Auth Flow" exactly
+  if ! printf '%s' "$reqs" | grep -qE '^### Auth Flow$'; then
+    case6_ok=0
+    echo "  detail: missing '### Auth Flow' header for category:auth-flow label"
+    printf '%s' "$reqs" | grep '^### ' || echo "  (no ### headers found)"
+  fi
+
+  # Test 3: single-word category produces exact "### Auth" (NOT "auth", NOT "AUTH", NOT "\Uauth")
+  if ! printf '%s' "$reqs" | grep -qE '^### Auth$'; then
+    case6_ok=0
+    echo "  detail: missing exact '### Auth' header for category:auth label"
+    printf '%s' "$reqs" | grep '^### ' || true
+  fi
+
+  # Test 4 (Warning #3 closure): standalone-pipeline portability proof.
+  # Runs the post-fix capitalization pipeline directly on the literal
+  # input "auth-flow" — bypasses regen-requirements.sh entirely. Uses
+  # only POSIX-mandated tr and awk, so the result is BSD-equivalent
+  # by construction. Asserts output is exactly "Auth Flow".
+  pipeline_out="$(printf '%s' 'auth-flow' \
+    | tr '-' ' ' \
+    | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2)); print}')"
+  if [ "$pipeline_out" != "Auth Flow" ]; then
+    case6_ok=0
+    echo "  detail: standalone tr|awk pipeline produced '$pipeline_out' instead of 'Auth Flow'"
+  fi
+
+  rm -rf "$fixture"
+}
+if [ "$case6_ok" -eq 1 ]; then
+  pass=$((pass + 1))
+  echo "  PASS: category headers portable (no \\U literal, multi-word handled, BSD-equivalent pipeline)"
+else
+  fail=$((fail + 1))
+  echo "  FAIL: category capitalization not portable"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
