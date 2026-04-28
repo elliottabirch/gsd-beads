@@ -184,6 +184,56 @@ run_state_change_test "CASE16-cascade-fired-bd-close"  "bd close abc-1"
 run_state_change_test "CASE17-cascade-fired-bd-q"      "bd q 'X' -t epic"
 
 echo ""
+echo "=== Suite: Flock-failure fail-soft (D-15, 1 case) ==="
+
+# Proves bd-sync.sh's `|| true` chain still fires regen-roadmap and
+# regen-requirements when cascade-loop returns non-zero (e.g. a flock
+# timeout). Regression guard for the D-15 fail-soft contract.
+run_flock_failure_test() {
+  local name="$1"; local command="$2"
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  # Failing cascade stub (simulates flock timeout exit 1)
+  cat > "$tmpdir/cascade-loop.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "[gsd-beads] another regen is in progress at /fake/.gsd-beads.lock — retry shortly" >&2
+exit 1
+STUB
+  chmod +x "$tmpdir/cascade-loop.sh"
+  # regen-roadmap stub: still records being fired (proves || true gates each)
+  cat > "$tmpdir/regen-roadmap.sh" <<'STUB'
+#!/usr/bin/env bash
+touch "${REGEN_ROADMAP_MARKER:-/tmp/regen-roadmap-stub-fired}"
+STUB
+  chmod +x "$tmpdir/regen-roadmap.sh"
+  cat > "$tmpdir/regen-requirements.sh" <<'STUB'
+#!/usr/bin/env bash
+touch "${REGEN_REQUIREMENTS_MARKER:-/tmp/regen-requirements-stub-fired}"
+STUB
+  chmod +x "$tmpdir/regen-requirements.sh"
+  local marker_rr="$tmpdir/rr.marker"
+  local marker_rreq="$tmpdir/rreq.marker"
+  export REGEN_ROADMAP_MARKER="$marker_rr"
+  export REGEN_REQUIREMENTS_MARKER="$marker_rreq"
+  export SCRIPTS="$tmpdir"
+  run_bd_payload "$command"
+  rc=$?
+  unset REGEN_ROADMAP_MARKER REGEN_REQUIREMENTS_MARKER SCRIPTS
+  local rr_fired="no"; [ -f "$marker_rr" ] && rr_fired="yes"
+  local rreq_fired="no"; [ -f "$marker_rreq" ] && rreq_fired="yes"
+  local status
+  if [ "$rc" = "0" ] && [ "$rr_fired" = "yes" ] && [ "$rreq_fired" = "yes" ]; then
+    status="PASS"; pass=$((pass+1))
+  else
+    status="FAIL"; fail=$((fail+1))
+  fi
+  printf '  [%s] %-50s rc=%s rr=%s rreq=%s\n' "$status" "$name" "$rc" "$rr_fired" "$rreq_fired"
+  rm -rf "$tmpdir"
+}
+
+run_flock_failure_test "CASE18-flock-failure-still-fires-chain-and-returns-0" "bd close abc-1"
+
+echo ""
 total=$((pass+fail))
 echo "Passed: $pass / $total"
 [ "$fail" -eq 0 ]
