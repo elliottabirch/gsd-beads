@@ -26,12 +26,12 @@ must_haves:
     - "install.sh fires the appended shim against every enumerated worktree path with `HEAD HEAD 1` (the canonical backfill invocation pattern from RESEARCH.md §Pattern 3)"
     - "install.sh skips `bare` and `prunable` worktree records during enumeration (RESEARCH.md §Pattern 2)"
     - "Pre-existing worktrees gain `git config --worktree gsd-beads.dir` and `.gsd-beads-configured` markers after install.sh runs (D-08 idempotent)"
-    - "tests/cross-worktree/simulation.sh creates 3 worktrees (main + feature + hotfix) under /tmp via `mktemp -d`, runs a 4-day bd flow, and exits 0 (REQ-03 happy path)"
+    - "tests/cross-worktree/simulation.sh creates 3 worktrees (main + feature + hotfix) under /tmp via `mktemp -d`, runs a 4-day bd flow, and exits 0 (D-01 live-dev simulation; D-02 3-worktree topology; D-03 happy-path first; REQ-03 happy path)"
     - "Invariant 1 (no data loss): every issue created in any worktree appears in `bd list --json` from the source store (D-04 #1)"
     - "Invariant 2 (no ID collision): all hash-based IDs across all 3 worktrees + 20-op concurrent burst are unique (D-04 #2)"
     - "Invariant 3 (no stale state): a write in worktree-A is observable from worktree-B via `bd list` without manual sync (D-04 #3)"
     - "Invariant 4 (atomic markdown): regenerated ROADMAP.md / REQUIREMENTS.md is never observed mid-write during the concurrent burst (D-04 #4)"
-    - "4 failure injections fire: source `.beads/` deleted (D-13.1), concurrent regen race (D-13.2), source repo renamed (D-13.3), BEADS_DIR unset (D-13.4)"
+    - "4 failure injections fire AFTER the happy-path flow (D-03 targeted-injection ordering): source `.beads/` deleted (D-13.1), concurrent regen race (D-13.2), source repo renamed (D-13.3), BEADS_DIR unset (D-13.4)"
     - "tests/install-tests/worktree-backfill.test.sh proves install.sh backfills 2 pre-existing worktrees (REQ-03)"
     - "tests/run-quick.sh case statement gains `cross-worktree-sim` invocation (03-VALIDATION.md sampling rate)"
     - "tests/run-all.sh globs `tests/cross-worktree/*.sh` (verified existing pattern OR extended)"
@@ -865,4 +865,5 @@ After completion, create `.planning/phases/03-cross-worktree-validation/03-02-SU
 - The exact `git worktree list --porcelain` output observed during the worktree-backfill test (so the WORKTREES.md walkthrough in Plan 03-03 quotes accurate output).
 - The empirically-observed wall time of `simulation.sh` on the dev machine (so Plan 03-03's docs/WORKTREES.md sets correct user expectations).
 - Any pre-existing dev-env caveats that surface (analogous to Phase 2's stray bd-memory-key issue noted in 02-VERIFICATION.md).
+</output>
 </output>

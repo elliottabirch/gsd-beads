@@ -20,7 +20,7 @@ must_haves:
   truths:
     - "install/memories/worktrees.md exists with self-contained worktree briefing content (D-11: full content, NOT a thin pointer)"
     - "install.sh's existing memory-seeding loop (lines 105-110) automatically picks up worktrees.md and seeds it as bd memory `gsd-beads:worktrees` (memory #8 — D-09 layer 1)"
-    - "docs/WORKTREES.md exists with three sections: setup walkthrough, lifecycle ops (add/remove/reactivate per D-05), troubleshooting (4 failure modes from D-13 with one-line recoveries) (D-10)"
+    - "docs/WORKTREES.md exists with three sections: setup walkthrough, lifecycle ops (add/remove/reactivate per D-05; remove requires no gsd-beads-side cleanup per D-06; reactivating an old worktree path relies on existing marker-gate idempotency per D-07), troubleshooting (4 failure modes from D-13 with one-line recoveries) (D-10)"
     - "docs/WORKTREES.md documents the source-repo-rename recovery as the literal `git config --worktree gsd-beads.dir <new-source-path>/.beads` one-liner (D-14)"
     - "docs/WORKTREES.md documents the macOS `brew install flock` requirement (RESEARCH.md Pitfall 1)"
     - "docs/WORKTREES-EVIDENCE.md exists with one `## Observed: <invariant>` section per invariant from D-04, each with a 5-10-line transcript excerpt from a real simulation run (D-12)"
