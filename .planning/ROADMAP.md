@@ -93,7 +93,14 @@ refactor + mutation-handler audit gate.
   4. Parity snapshot test (red → green) for both handlers exists and was written **before** the handler implementation; CI fails if either handler omits a key from the upstream shape.
   5. On a non-bd fixture, both queries fall through to upstream unchanged (verified by passthrough test asserting `backend !== 'beads'`).
 
-**Plans**: TBD
+**Plans:** 5 plans
+
+Plans:
+- [ ] 05-01-fixture-migration-PLAN.md — build-seed.sh emits phase-id:NN labels + milestone-heading memories + 11 phases / 24 plan children for SC #2 substrate (D-03/D-18)
+- [ ] 05-02-shared-helpers-PLAN.md — parsePhaseId, deriveDiskStatus, detectDrift, loadMilestoneHeading helpers + assertKeySetParityWithExt extension (D-02/D-07/D-10..D-12/D-13/D-15..D-17)
+- [ ] 05-03-roadmap-analyze-PLAN.md — beadsRoadmapAnalyze handler + parity snapshot + counts/milestone-scoping/drift tests; deletes _phase4-test-stub (REQ-READ-01, SC #1, #2, #4, #5)
+- [ ] 05-04-roadmap-get-phase-PLAN.md — beadsRoadmapGetPhase handler + cross-handler-parity test (REQ-READ-02, SC #3, #5)
+- [ ] 05-05-quality-gates-PLAN.md — handler-roadmap-determinism.test.sh (5x byte-identical) + handler-roadmap-call-count.test.mjs (<=2 spawns) precursors for Phase 11
 
 ### Phase 6: progress.* read handlers
 
