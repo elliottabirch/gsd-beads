@@ -234,4 +234,46 @@ correct bd-derived state on a beads-managed fixture.
 
 ## Traceability
 
-(Filled by roadmapper.)
+
+### Milestone v0.1 (validated)
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| REQ-01 | Phase 2 | Validated (2026-04-28) |
+| REQ-02 | Phase 2 | Validated (2026-04-28) |
+| REQ-03 | Phase 2, Phase 3 | Validated (2026-04-28) |
+| REQ-04 | Phase 2 | Validated (2026-04-28) |
+| REQ-05 | Phase 2 | Validated (2026-04-28) |
+| REQ-06 | Phase 2 | Validated (2026-04-28) |
+| REQ-07 | Phase 2 | Validated (2026-04-28) |
+| REQ-08 | Phase 2 | Validated (2026-04-28) |
+
+### Milestone v0.2 — Beads-backed reads
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| REQ-READ-01 (`roadmap.analyze`) | Phase 5 | Pending |
+| REQ-READ-02 (`roadmap.get-phase`) | Phase 5 | Pending |
+| REQ-READ-03 (`progress.json`) | Phase 6 | Pending |
+| REQ-READ-04 (`progress` / `progress.bar` / `progress.table`) | Phase 6 | Pending |
+| REQ-READ-05 (`state-snapshot`) | Phase 7 | Pending |
+| REQ-READ-06 (`state.json`) | Phase 7 | Pending |
+| REQ-READ-07 (`state.load`) | Phase 7 | Pending |
+| REQ-READ-08 (`find-phase`) | Phase 8 | Pending |
+| REQ-READ-09 (`init.progress`) | Phase 9 | Pending |
+| REQ-READ-10 (`init.milestone-op`) | Phase 9 | Pending |
+| REQ-READ-11 (`init.todos`) | Phase 9 | Pending |
+| REQ-READ-12 (`phases.list`) | Phase 8 | Pending |
+| REQ-READ-13 (`phase.next-decimal`) | Phase 8 | Pending |
+| REQ-READ-14 (`phase-plan-index`) | Phase 8 | Pending |
+| REQ-QUAL-01 (output shape parity) | Phase 4 (plumbing); referenced by Phases 5, 6, 7, 8, 9 | Pending |
+| REQ-QUAL-02 (read-shaped fallback contract) | Phase 4 (plumbing); referenced by Phases 5, 6, 7, 8, 9 | Pending |
+| REQ-QUAL-03 (`findBeadsRoot()` for reads) | Phase 4 | Pending |
+| REQ-QUAL-04 (non-bd projects unchanged) | Phase 11 | Pending |
+| REQ-QUAL-05 (hook-safe bd subcommand allowlist) | Phase 11 | Pending |
+| REQ-QUAL-06 (deterministic ordering) | Phase 11 | Pending |
+| REQ-QUAL-07 (performance budget) | Phase 11 | Pending |
+| REQ-VERIFY-01 (state-mutation hook coverage audit) | Phase 10 *(blocks ship; parallelisable)* | Pending |
+| REQ-VERIFY-02 (transitive P1 verification) | Phase 11 | Pending |
+
+**Coverage:** 23/23 v0.2 requirements mapped to exactly one owning phase. REQ-QUAL-01 and REQ-QUAL-02 are owned by Phase 4 (where the harness/sentinel are built) but are referenced from each read-handler phase's success criteria as the parity-test-first invariant.
