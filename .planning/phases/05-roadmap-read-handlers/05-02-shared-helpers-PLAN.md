@@ -13,7 +13,7 @@ files_modified:
   - tests/shadow-tests/helpers-loadMilestoneHeading.test.mjs
   - tests/shadow-tests/_parity-helpers.test.mjs
 autonomous: true
-requirements: []
+requirements: [REQ-READ-01, REQ-READ-02]
 tags:
   - helpers
   - parity-extension
@@ -25,13 +25,14 @@ tags:
 key_decisions:
   - "Q3 Option B: Add new function `assertKeySetParityWithExt(actual, snapshot, extensions, path = '')` to _parity-helpers.mjs. Non-breaking: existing `assertKeySetParity` callers (Phase 4 stub test, future phases) keep working. Phase 5 handler tests use the new function with `extensions: ['drift']`. Option A (mutate signature) was rejected because it risks subtle breakage if any test passes `path` positionally. Option C (module-level export) was rejected because per-call extension lists are clearer than a global one."
   - "All 4 helpers live in bin/gsd-sdk-shadow.mjs (NOT a new bin/roadmap-helpers.mjs file). Rationale: the helpers are <40 LOC total; pulling them into a new module adds an import for marginal cohesion gain. The module already exceeds 400 LOC but stays readable; Phase 6+ can refactor if call sites multiply."
-  - "Pitfall 2 resolution (gsd:summary label vs disk-only): summary_count derives from DISK *-SUMMARY.md count, NOT bd children with `gsd:summary` label. The label does not exist in production (verified against tstl-sylvanas in STACK.md). deriveDiskStatus takes `summaryCount` from disk; bd plan_count is bd-truth; drift detection compares the two via filesystem readdir for both sides. This is a refinement of D-06 ('summary_count from disk') announced here; documented in handler doc-comment in Plan 03."
+  - "summary_count derives from `bd children <phase> -l gsd:plan --status=closed` count per refined D-06 (commit 7feccb8). Drift kind `summary_count` stays LIVE: detectDrift compares the bd closed-plan count against the disk `*-SUMMARY.md` count and emits a drift entry when they diverge. This honors the 'bd is source of truth' principle (cascade-loop auto-closes plan beads when their child tasks complete) while alerting users to filesystem inconsistencies. Plan 02 helper-detectDrift.test.mjs exercises a fixture variant where bd has 2 closed plan beads and disk has 1 SUMMARY.md → drift entry emitted with kind='summary_count', bd_value=2, disk_value=1."
+  - "Plan 02 supplies the substrate for both REQ-READ-01 (parsePhaseId/deriveDiskStatus/detectDrift/loadMilestoneHeading consumed by beadsRoadmapAnalyze) and REQ-READ-02 (same helpers consumed by beadsRoadmapGetPhase) — these helpers are the shared substrate for both read handlers."
 
 must_haves:
   truths:
     - "parsePhaseId('phase-id:05') returns '5'; parsePhaseId('phase-id:72.1') returns '72.1'; parsePhaseId(null/undefined) returns null"
     - "deriveDiskStatus returns the correct enum value across all 7 priority cases (D-07): no_directory, complete, partial, planned, researched, discussed, empty"
-    - "detectDrift emits exactly 4 drift kinds (plan_count, summary_count, closed_without_summary, completed_phases_mismatch) and skips natural asymmetries per D-11"
+    - "detectDrift emits exactly 4 drift kinds (plan_count, summary_count, closed_without_summary, completed_phases_mismatch) and skips natural asymmetries per D-11; the `summary_count` drift kind is LIVE per refined D-06 (compares bd closed-plan count vs disk SUMMARY.md count)"
     - "loadMilestoneHeading returns 'Milestone v0.2 — Beads-backed reads' when memory exists; 'v0.2' (bare) when absent + emits stderr note per D-17"
     - "_parity-helpers.mjs exports assertKeySetParityWithExt(actual, snapshot, extensions, path = ''); existing assertKeySetParity export is untouched (backwards compatible)"
   artifacts:
@@ -46,7 +47,7 @@ must_haves:
     - path: "tests/shadow-tests/helpers-deriveDiskStatus.test.mjs"
       provides: "7 priority cases covered (D-07)"
     - path: "tests/shadow-tests/helpers-detectDrift.test.mjs"
-      provides: "4 drift kinds + natural-asymmetry exclusions (D-10/D-11)"
+      provides: "4 drift kinds + natural-asymmetry exclusions (D-10/D-11) + LIVE summary_count divergence case (refined D-06)"
     - path: "tests/shadow-tests/helpers-loadMilestoneHeading.test.mjs"
       provides: "Memory-hit + fallback paths (D-15..D-17)"
   key_links:
@@ -145,13 +146,13 @@ export function assertTypeParity(actual, snapshot, path = '') { /* ... */ }
     - Test 7: planCount=0, hasResearch=false, hasContext=false, dirExists=true → 'empty'
     - Test 8 (priority order): planCount=2, summaryCount=2, hasContext=true, hasResearch=true → 'complete' (priority 1 wins)
 
-    **helpers-detectDrift.test.mjs (D-10..D-12):**
+    **helpers-detectDrift.test.mjs (D-10..D-12 + refined D-06):**
     - Test 1: bd.plan_count === disk.disk_plan_count → no drift entry, no stderr
-    - Test 2: bd.plan_count=3, disk.disk_plan_count=2 → 1 drift entry { kind: 'plan_count', bd_value: 3, disk_value: 2 } + stderr line matching `/DRIFT: phase 5 plan_count bd=3 disk=2/`
-    - Test 3: bd.summary_count=2, disk.disk_summary_count=0 → 1 drift entry { kind: 'summary_count', ... }
-    - Test 4: bd.bd_status='closed', disk.disk_summary_count=0 → 1 entry { kind: 'closed_without_summary' }
+    - Test 2 (plan_count drift): bd.plan_count=3, disk.disk_plan_count=2 → 1 drift entry { kind: 'plan_count', bd_value: 3, disk_value: 2 } + stderr line matching `/DRIFT: phase 5 plan_count bd=3 disk=2/`
+    - Test 3 (LIVE summary_count divergence — refined D-06): Construct inputs where bd has 2 closed gsd:plan children for the phase and disk has 1 *-SUMMARY.md file. Call detectDrift with bd_summary_count=2, disk_summary_count=1. Assert exactly 1 drift entry { kind: 'summary_count', bd_value: 2, disk_value: 1 } + stderr line matching `/DRIFT: phase 5 summary_count bd=2 disk=1/`. **This proves the summary_count branch is real, NOT dead code.**
+    - Test 4 (closed_without_summary): bd.bd_status='closed', disk.disk_summary_count=0 → 1 entry { kind: 'closed_without_summary' }
     - Test 5 (D-11 natural asymmetry): bd.plan_count=0, disk.disk_plan_count=0, bd.bd_status='open' → empty drift array even if dir absent (handler skips dir-absent case for open phases — but detectDrift itself is dumb; the handler is responsible for guarding the call. Test that detectDrift emits NO entry when both counts equal regardless of bd_status)
-    - Test 6 (multiple kinds in one call): all 3 single-phase drift conditions firing simultaneously → array length 3
+    - Test 6 (multiple kinds in one call): all 3 single-phase drift conditions firing simultaneously (plan_count diverge + summary_count diverge + closed_without_summary) → array length 3
     Use a stderr capture helper: spawn the test with a child process that imports the function and writes JSON.stringify(detectDrift(...)) to stdout; assert stderr regex separately. OR mock console.error with t.mock.method to avoid the spawn.
     Recommended: use `t.mock.method(console, 'error', () => {})` from node:test mocking API to capture calls without spawning.
 
@@ -212,12 +213,13 @@ export function assertTypeParity(actual, snapshot, path = '') { /* ... */ }
     - File `tests/shadow-tests/helpers-parsePhaseId.test.mjs` exists with ≥6 `test(` calls
     - File `tests/shadow-tests/helpers-deriveDiskStatus.test.mjs` exists with ≥7 `test(` calls (one per D-07 priority case + 1 priority-order case)
     - File `tests/shadow-tests/helpers-detectDrift.test.mjs` exists with ≥6 `test(` calls
+    - `grep -c "kind: 'summary_count'" tests/shadow-tests/helpers-detectDrift.test.mjs` returns ≥1 (proves the LIVE summary_count branch is exercised per refined D-06)
     - File `tests/shadow-tests/helpers-loadMilestoneHeading.test.mjs` exists with ≥4 `test(` calls
     - `tests/shadow-tests/_parity-helpers.test.mjs` has 2 NEW test cases (CASE 7, CASE 8); pre-existing 6 cases unchanged
     - At Task 1 completion (red phase): running all 5 files together produces ≥4 failures (the 4 helper tests fail because functions not yet exported; _parity-helpers.test.mjs has 2 new failures for CASE 7-8). The 6 pre-existing _parity-helpers cases still pass.
     - `grep -v '^//' tests/shadow-tests/helpers-parsePhaseId.test.mjs | grep -c "import.*parsePhaseId.*from.*gsd-sdk-shadow"` returns ≥1 (proves the test imports from the production module, not a copy)
   </acceptance_criteria>
-  <done>5 test files created/extended; running them produces a deterministic red signal (≥4 helper-related failures + 2 _parity-helpers failures, with pre-existing 6 _parity-helpers cases still green). The test scaffolding is the contract Task 2 implements against.</done>
+  <done>5 test files created/extended; running them produces a deterministic red signal (≥4 helper-related failures + 2 _parity-helpers failures, with pre-existing 6 _parity-helpers cases still green). The test scaffolding is the contract Task 2 implements against. detectDrift summary_count CASE is LIVE per refined D-06.</done>
 </task>
 
 <task type="auto">
@@ -265,9 +267,19 @@ export function assertTypeParity(actual, snapshot, path = '') { /* ... */ }
     }
 
     /**
-     * D-09/D-10: Drift kinds — plan_count, summary_count, closed_without_summary.
+     * D-09/D-10 + refined D-06: Drift kinds — plan_count, summary_count, closed_without_summary.
      * Aggregate kind `completed_phases_mismatch` is computed at handler-level (post-loop), not here.
+     *
+     * Per refined D-06 (commit 7feccb8): summary_count is LIVE — bd's "summarized plan count"
+     * (closed gsd:plan children) is compared against disk *-SUMMARY.md count. The handler
+     * MUST pass distinct bd_summary_count and disk_summary_count values for this comparison
+     * to be meaningful (do NOT pass the same value for both).
+     *
      * Emits stderr line per drift case (D-09 channel 1) and returns array (channel 2).
+     *
+     * @param {string} phase - phase number (e.g. "5")
+     * @param {{plan_count:number, summary_count:number, bd_status:string}} bdState - bd-derived counts (summary_count = closed gsd:plan child count)
+     * @param {{disk_plan_count:number, disk_summary_count:number}} diskState - filesystem-derived counts
      */
     export function detectDrift(phase, bdState, diskState) {
       const entries = [];
@@ -394,12 +406,15 @@ After both tasks:
 - `assertKeySetParityWithExt` added without breaking the 2 existing parity-helper exports
 - 5 new test files (4 helper + 1 extension) all green; Phase 4 baseline 83/83 unchanged; bd-allowlist + seed-determinism + memories-seeded still green
 - Helpers are documented with JSDoc comments referencing the relevant decision IDs
+- detectDrift summary_count branch is LIVE (refined D-06): exercised by helpers-detectDrift CASE 3 fixture variant where bd_summary_count=2 ≠ disk_summary_count=1 emits drift entry
 </success_criteria>
 
 <output>
 After completion, create `.planning/phases/05-roadmap-read-handlers/05-02-SUMMARY.md` documenting:
 - Final exported helper signatures (4 from shadow + 1 from _parity-helpers)
-- Test counts: parsePhaseId (6), deriveDiskStatus (7+), detectDrift (6), loadMilestoneHeading (4), _parity-helpers extension (CASEs 7-8 added to existing 6)
+- Test counts: parsePhaseId (6), deriveDiskStatus (7+), detectDrift (6 — including LIVE summary_count CASE 3), loadMilestoneHeading (4), _parity-helpers extension (CASEs 7-8 added to existing 6)
 - Helper insertion location in gsd-sdk-shadow.mjs (line range)
-- Decision: Pitfall 2 resolution (summary_count from disk, not gsd:summary label) noted for Plan 03 to honor in handler doc-comment
+- Decision: refined D-06 honored — detectDrift summary_count comparison takes distinct bd vs disk values; Plan 03 Task 3 handler must pass `bd_summary_count` (closed gsd:plan child count) and `disk_summary_count` (filesystem *-SUMMARY.md count) as distinct values
 </output>
+</content>
+</invoke>
