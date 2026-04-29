@@ -1,14 +1,23 @@
 #!/usr/bin/env node
 // Y1 (shadow gsd-sdk) — registry-override variant.
 // GSD core unmodified per REQ-02; uses dynamic import of upstream's dist/.
-// D-02 invariant: all 13 BEADS_OVERRIDES handlers live in this single file.
+// D-02 invariant: 13 mutation entries (BEADS_OVERRIDES) live here.
+//                 Reads (BEADS_READ_OVERRIDES) register separately; empty in Phase 4
+//                 (test stub registers only when GSD_SHADOW_TEST_STUB=1).
 // D-09 / W3 invariant: production eventStream=null → wrapMutation is a no-op (MVP).
 
 import { spawnSync, execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, realpathSync, statSync, readFileSync } from 'node:fs';
+import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { wrapMutation } from './wrap-mutation.mjs';
+import {
+  BeadsUnavailableError,
+  BeadsNotInstalled,
+  BeadsCorrupt,
+  BeadsVersionMismatch,
+  BeadsEmpty,
+} from './beads-errors.mjs';
 
 const DEBUG = process.env.GSD_BEADS_DEBUG === '1';
 const log = (...a) => { if (DEBUG) console.error('[gsd-sdk-shadow]', ...a); };
@@ -218,6 +227,75 @@ export const BEADS_OVERRIDES = {
   'milestone.complete': beadsMilestoneComplete,
 };
 
+// ─── findBeadsRoot — read-side project-root discovery ──────────────────────
+// D-01..D-04 + REQ-QUAL-03. Symmetric with hooks fix b51abbc.
+// Returns null on no-bd (NOT throws — D-13). Honors BEADS_DIR first (D-01),
+// follows symlinks via realpathSync (D-03), bounded parent-walk halts at .git
+// or filesystem root (D-02). Worktree handling: when .git is a FILE (not dir),
+// reads it to find the source repo and returns source root if it owns .beads/.
+export function findBeadsRoot(start) {
+  const envDir = process.env.BEADS_DIR;
+  if (envDir) {
+    let resolved;
+    try { resolved = realpathSync(resolve(envDir)); } catch { resolved = null; }
+    if (resolved && existsSync(join(resolved, 'metadata.json'))) {
+      return dirname(resolved);
+    }
+  }
+  let dir;
+  try { dir = realpathSync(resolve(start)); } catch { return null; }
+  while (true) {
+    if (existsSync(join(dir, '.beads', 'metadata.json'))) return dir;
+    const gitMarker = join(dir, '.git');
+    if (existsSync(gitMarker)) {
+      const stat = statSync(gitMarker);
+      if (stat.isFile()) {
+        // Worktree: .git file contains "gitdir: /path/to/source/.git/worktrees/<name>"
+        const content = readFileSync(gitMarker, 'utf-8').trim();
+        const m = content.match(/^gitdir:\s*(.+)$/m);
+        if (m) {
+          const sourceGitDir = m[1].trim();
+          // sourceGitDir ends in /.git/worktrees/<name>; walk up three dirnames to source root
+          const sourceRoot = dirname(dirname(dirname(sourceGitDir)));
+          if (existsSync(join(sourceRoot, '.beads', 'metadata.json'))) {
+            return sourceRoot;
+          }
+        }
+      }
+      return null;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+// ─── BEADS_READ_OVERRIDES table ────────────────────────────────────────────
+// Phase 4: empty by default. Test stub registers ONLY when GSD_SHADOW_TEST_STUB=1.
+// Phases 5–9 add real read handlers. Registered WITHOUT wrapMutation —
+// reads do NOT emit GSDEvent.StateMutation (D-09 forward-compat).
+export const BEADS_READ_OVERRIDES = {};
+
+// _phase4-test-stub: lifecycle-bound to Phase 4. Phase 5 deletes this block + the stub registration.
+if (process.env.GSD_SHADOW_TEST_STUB === '1') {
+  BEADS_READ_OVERRIDES['_phase4-test-stub'] = async function phase4TestStub(args, projectDir) {
+    const throwMode = process.env.GSD_SHADOW_TEST_STUB_THROW;
+    if (throwMode === 'not-installed')    throw new BeadsNotInstalled('test-stub: simulated bd missing');
+    if (throwMode === 'corrupt')          throw new BeadsCorrupt('test-stub: simulated metadata.json corruption');
+    if (throwMode === 'version-mismatch') throw new BeadsVersionMismatch('test-stub: simulated bd version out of range');
+    if (throwMode === 'empty')            throw new BeadsEmpty('test-stub: simulated empty .beads/');
+    if (throwMode === 'typeerror')        throw new TypeError('test-stub: real bug');
+    return { data: { ok: true, backend: 'beads' } };
+  };
+}
+
+// isKnownBdCliError — D-12: bd-CLI failures (binary missing, ENOENT) fall through to upstream
+// alongside BeadsUnavailableError. Real bugs (TypeError etc.) keep v0.1 loud-fail behavior.
+function isKnownBdCliError(err) {
+  if (err && err.code === 'ENOENT') return true;
+  return /command not found|bd: not found|ENOENT/i.test(err?.message ?? '');
+}
+
 // ─── CLI main — only runs when executed directly (not imported as module) ──
 // This guard allows tests to import BEADS_OVERRIDES without triggering CLI logic.
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
@@ -278,6 +356,11 @@ async function main() {
     registry.register(cmd, wrapMutation(handler, cmd, eventStream, sessionId));
   }
 
+  // Register read overrides WITHOUT wrapMutation (D-09: reads don't emit StateMutation events).
+  for (const [cmd, handler] of Object.entries(BEADS_READ_OVERRIDES)) {
+    registry.register(cmd, handler);
+  }
+
   // Build queryArgv: strip --project-dir <value> (handled above) from slice after 'query'
   const queryArgv = argv.slice(queryIdx + 1).filter((a, i, arr) => {
     if (a === '--project-dir') return false;
@@ -307,6 +390,15 @@ async function main() {
       : JSON.stringify(result));
     process.exit(0);
   } catch (err) {
+    if (err instanceof BeadsUnavailableError || isKnownBdCliError(err)) {
+      log(`read fall-through (${err?.name ?? 'bd CLI error'}): ${err?.message}`);
+      spawnUpstream(argv);
+      return;  // BLOCKER-1: explicit return so dispatch-failed branch is structurally
+               // unreachable for sentinel/bd-CLI errors, independent of spawnUpstream's
+               // process.exit side effect. Without this, a future refactor that makes
+               // spawnUpstream return (e.g., Promise-based, or test-harness mock of
+               // process.exit) would silently double-emit and defeat the contract.
+    }
     console.error(`[gsd-sdk-shadow] dispatch failed: ${err.message}`);
     process.exit(1);
   }
