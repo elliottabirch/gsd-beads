@@ -32,17 +32,41 @@ if [ -f "$ROADMAP_PATH" ]; then
 fi
 
 # Run cascade then regen
-# SCRIPTS env var can be overridden by tests to inject stubs
+# SCRIPTS env var can be overridden by tests to inject stubs.
+# Resolution order:
+#   1. $PROJECT/.claude/scripts/   — project-local override (rare)
+#   2. $PROJECT/scripts/           — dev/repo-root layout (gsd-beads itself)
+#   3. $HOME/.claude/scripts/      — install.sh canonical install location
+# A directory existing is not enough — it must contain an executable
+# cascade-loop.sh. Otherwise real-world deploys (where install.sh writes to
+# ~/.claude/scripts/ and most projects have an unrelated $PROJECT/scripts/
+# directory) silently fall through to a path with no regen scripts.
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 if [ -z "${SCRIPTS:-}" ]; then
-  SCRIPTS="${CLAUDE_PROJECT_DIR:-$PWD}/.claude/scripts"
-  if [ ! -d "$SCRIPTS" ]; then
+  SCRIPTS="$PROJECT_DIR/.claude/scripts"
+  if [ ! -d "$SCRIPTS" ] || [ ! -x "$SCRIPTS/cascade-loop.sh" ]; then
     # Fallback: scripts may live at repo-root scripts/ during dev
-    SCRIPTS="${CLAUDE_PROJECT_DIR:-$PWD}/scripts"
+    SCRIPTS="$PROJECT_DIR/scripts"
+  fi
+  if [ ! -d "$SCRIPTS" ] || [ ! -x "$SCRIPTS/cascade-loop.sh" ]; then
+    # Final fallback: install.sh-canonical location.
+    SCRIPTS="$HOME/.claude/scripts"
   fi
 fi
 
 "$SCRIPTS/cascade-loop.sh" --quiet || true
 "$SCRIPTS/regen-roadmap.sh" || true
 "$SCRIPTS/regen-requirements.sh" || true
+
+# Opportunistic project-local STATE.md regen.
+# Some projects (e.g. tstl-sylvanas) ship a project-local regen-state.sh that
+# rebuilds STATE.md from .planning/ artifacts. Prefer the project-local copy
+# (where tstl-sylvanas keeps it) over the gsd-beads-shipped SCRIPTS dir.
+# Fail-soft: skip silently if no copy exists; this is opt-in per-project.
+if [ -x "$PROJECT_DIR/scripts/regen-state.sh" ]; then
+  "$PROJECT_DIR/scripts/regen-state.sh" || true
+elif [ -x "$SCRIPTS/regen-state.sh" ]; then
+  "$SCRIPTS/regen-state.sh" || true
+fi
 
 exit 0

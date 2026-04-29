@@ -264,6 +264,181 @@ STUB
 run_flock_failure_test "CASE18-flock-failure-still-fires-chain-and-returns-0" "bd close abc-1"
 
 echo ""
+echo "=== Suite: SCRIPTS resolution fallback (4 cases) ==="
+
+# These cases exercise bd-sync.sh's SCRIPTS resolution when SCRIPTS is NOT
+# pre-set by the test runner. Real-world deploy reality:
+#   1. install.sh writes scripts to $HOME/.claude/scripts/
+#   2. $PROJECT/.claude/scripts/ rarely exists
+#   3. $PROJECT/scripts/ usually exists in dev projects but contains
+#      project-specific scripts, not regen scripts
+# Pre-fix bug: bd-sync.sh checked only `[ -d "$SCRIPTS" ]`, so it would resolve
+# to $PROJECT/scripts/ (which exists) and silently fail when running
+# $PROJECT/scripts/cascade-loop.sh (which doesn't exist). The hook exits 0,
+# masking the failure entirely. Fix: also require cascade-loop.sh to be
+# executable in the chosen dir, and add $HOME/.claude/scripts/ as final fallback.
+
+# Helper that runs the hook with mocked HOME and a sandbox project dir.
+# Uses unset SCRIPTS so the hook performs actual path resolution.
+run_resolution_test() {
+  local name="$1"
+  local layout="$2"      # "claude_scripts" | "repo_scripts" | "home_scripts"
+  local expect_fired="$3" # "yes" | "no"
+  local sandbox project_dir fake_home marker_c
+  sandbox=$(mktemp -d)
+  project_dir="$sandbox/project"
+  fake_home="$sandbox/home"
+  mkdir -p "$project_dir/scripts" "$project_dir/.claude/scripts" "$fake_home/.claude/scripts"
+  marker_c="$sandbox/cascade.marker"
+
+  # Cascade stub fired-marker writer (not project-aware: we just check it ran)
+  write_stub() {
+    cat > "$1" <<STUB
+#!/usr/bin/env bash
+touch "$marker_c"
+STUB
+    chmod +x "$1"
+  }
+  # Always make a regen-roadmap and regen-requirements stub at whichever location wins
+  # (so the chained scripts don't print errors during the test).
+  write_regen_stubs() {
+    local d="$1"
+    cat > "$d/regen-roadmap.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+    cat > "$d/regen-requirements.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+    chmod +x "$d/regen-roadmap.sh" "$d/regen-requirements.sh"
+  }
+
+  case "$layout" in
+    claude_scripts)
+      write_stub "$project_dir/.claude/scripts/cascade-loop.sh"
+      write_regen_stubs "$project_dir/.claude/scripts"
+      ;;
+    repo_scripts)
+      # Pre-fix-buggy reality: project HAS a scripts/ dir but it does NOT contain cascade-loop.sh
+      # In our case-2, the test asserts that cascade-loop.sh actually present at $PROJECT/scripts/
+      # IS picked up correctly (no spurious fallback to $HOME/.claude/scripts).
+      write_stub "$project_dir/scripts/cascade-loop.sh"
+      write_regen_stubs "$project_dir/scripts"
+      ;;
+    home_scripts)
+      # Neither project-local path has the script; only $HOME/.claude/scripts/ does.
+      # This is the install.sh canonical real-world layout.
+      write_stub "$fake_home/.claude/scripts/cascade-loop.sh"
+      write_regen_stubs "$fake_home/.claude/scripts"
+      ;;
+    decoy_repo_scripts)
+      # $PROJECT/scripts/ EXISTS but does NOT contain cascade-loop.sh.
+      # This is the bug-reproduction layout: pre-fix, hook would resolve to
+      # $PROJECT/scripts/ and silently fail. Post-fix, it must fall through
+      # to $HOME/.claude/scripts/.
+      write_stub "$fake_home/.claude/scripts/cascade-loop.sh"
+      write_regen_stubs "$fake_home/.claude/scripts"
+      # Leave $project_dir/scripts/ as an empty dir (no cascade-loop.sh)
+      ;;
+  esac
+
+  unset SCRIPTS
+  # Run hook with mocked CLAUDE_PROJECT_DIR and HOME
+  payload=$(jq -n --arg cmd "bd close abc-1" \
+    '{tool_input:{command:$cmd}, hook_event_name:"PostToolUse", tool_name:"Bash"}')
+  CLAUDE_PROJECT_DIR="$project_dir" HOME="$fake_home" \
+    bash -c 'printf "%s" "$1" | "$2"' _ "$payload" "$SYNC_HOOK" 2>/dev/null || true
+
+  local fired="no"
+  [ -f "$marker_c" ] && fired="yes"
+  local status; if [ "$fired" = "$expect_fired" ]; then status="PASS"; pass=$((pass+1)); else status="FAIL"; fail=$((fail+1)); fi
+  printf '  [%s] %-50s layout=%s fired=%s\n' "$status" "$name" "$layout" "$fired"
+  rm -rf "$sandbox"
+}
+
+run_resolution_test "CASE19-resolves-project-claude-scripts" "claude_scripts" "yes"
+run_resolution_test "CASE20-resolves-project-repo-scripts"   "repo_scripts"   "yes"
+run_resolution_test "CASE21-falls-back-to-home-claude-scripts" "home_scripts" "yes"
+run_resolution_test "CASE22-decoy-empty-repo-scripts-falls-through-to-home" "decoy_repo_scripts" "yes"
+
+echo ""
+echo "=== Suite: Opportunistic regen-state.sh detection (3 cases) ==="
+
+# regen-state.sh is opt-in per-project (tstl-sylvanas ships one; gsd-beads
+# itself does not). The hook should:
+#   - invoke $PROJECT/scripts/regen-state.sh if executable (preferred)
+#   - else invoke $SCRIPTS/regen-state.sh if executable
+#   - else do nothing (no error)
+run_state_regen_test() {
+  local name="$1"
+  local where="$2"           # "project" | "scripts" | "none"
+  local expect_state_fired="$3"  # "yes" | "no"
+  local expect_source="$4"   # "project" | "scripts" | ""
+  local sandbox project_dir fake_home marker_state marker_source
+  sandbox=$(mktemp -d)
+  project_dir="$sandbox/project"
+  fake_home="$sandbox/home"
+  mkdir -p "$project_dir/scripts" "$fake_home/.claude/scripts"
+  marker_state="$sandbox/state.marker"
+  marker_source="$sandbox/source.marker"
+
+  # Always set up a working SCRIPTS via $HOME/.claude/scripts/
+  cat > "$fake_home/.claude/scripts/cascade-loop.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  cat > "$fake_home/.claude/scripts/regen-roadmap.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  cat > "$fake_home/.claude/scripts/regen-requirements.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$fake_home/.claude/scripts"/*.sh
+
+  # State-regen stub writes a marker (and a source identifier)
+  write_state_stub() {
+    cat > "$1" <<STUB
+#!/usr/bin/env bash
+touch "$marker_state"
+echo "$2" > "$marker_source"
+STUB
+    chmod +x "$1"
+  }
+
+  case "$where" in
+    project) write_state_stub "$project_dir/scripts/regen-state.sh" "project" ;;
+    scripts) write_state_stub "$fake_home/.claude/scripts/regen-state.sh" "scripts" ;;
+    both)
+      write_state_stub "$project_dir/scripts/regen-state.sh" "project"
+      write_state_stub "$fake_home/.claude/scripts/regen-state.sh" "scripts"
+      ;;
+    none) ;;
+  esac
+
+  unset SCRIPTS
+  payload=$(jq -n --arg cmd "bd close abc-1" \
+    '{tool_input:{command:$cmd}, hook_event_name:"PostToolUse", tool_name:"Bash"}')
+  CLAUDE_PROJECT_DIR="$project_dir" HOME="$fake_home" \
+    bash -c 'printf "%s" "$1" | "$2"' _ "$payload" "$SYNC_HOOK" 2>/dev/null || true
+
+  local state_fired="no"; [ -f "$marker_state" ] && state_fired="yes"
+  local source=""; [ -f "$marker_source" ] && source="$(cat "$marker_source")"
+  local status="PASS"
+  if [ "$state_fired" != "$expect_state_fired" ]; then status="FAIL"; fi
+  if [ -n "$expect_source" ] && [ "$source" != "$expect_source" ]; then status="FAIL"; fi
+  if [ "$status" = "PASS" ]; then pass=$((pass+1)); else fail=$((fail+1)); fi
+  printf '  [%s] %-50s where=%s state_fired=%s source=%s\n' "$status" "$name" "$where" "$state_fired" "$source"
+  rm -rf "$sandbox"
+}
+
+run_state_regen_test "CASE23-no-state-script-no-error"          "none"    "no"  ""
+run_state_regen_test "CASE24-project-state-script-fires"        "project" "yes" "project"
+run_state_regen_test "CASE25-prefers-project-over-scripts-dir"  "both"    "yes" "project"
+
+echo ""
 total=$((pass+fail))
 echo "Passed: $pass / $total"
 [ "$fail" -eq 0 ]
