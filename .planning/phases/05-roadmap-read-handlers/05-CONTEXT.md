@@ -85,7 +85,15 @@ between bd-backed counts and on-disk artifacts.
 - **D-06:** **bd is source of truth for count-derived fields; disk is
   source of truth for narrative-derived fields.**
   - `plan_count` ← `bd children <phase> -l gsd:plan` count
-  - `summary_count` ← `bd children <phase> -l gsd:summary` count
+  - `summary_count` ← `bd children <phase> -l gsd:plan --status=closed`
+    count. **Refined 2026-04-29:** `gsd:summary` label does NOT exist in
+    production (verified against the 149-bead tstl-sylvanas project per
+    research/STACK.md). Resolution: a plan is "summarized" when its bead
+    is closed; cascade-loop (`bd epic close-eligible`) auto-closes plan
+    beads when their child tasks complete. This keeps bd as the source
+    of truth (per discuss-phase principle) and keeps the `summary_count`
+    drift kind (D-10) live — `detectDrift` compares closed-plan count
+    against disk `*-SUMMARY.md` count and alerts on divergence.
   - `has_context` ← `phases/<dir>/*-CONTEXT.md` presence (disk-only; bd
     has no analog)
   - `has_research` ← `phases/<dir>/*-RESEARCH.md` presence (disk-only)
