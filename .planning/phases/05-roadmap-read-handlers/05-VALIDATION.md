@@ -1,15 +1,18 @@
 ---
 phase: 5
 slug: roadmap-read-handlers
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-29
+approval: 2026-04-29 (per-plan TDD pattern)
 ---
 
 # Phase 5 — Validation Strategy
 
 > Per-phase validation contract for feedback sampling during execution.
+
+**Per-plan TDD substitution (per-plan red→green pattern in lieu of formal Wave 0 separation):** Every Plan 01..05 ships its own RED test stub task as Task 1 (`tdd="true"`) immediately followed by the implementation task that turns the red test GREEN. This per-plan TDD discipline satisfies the Wave 0 contract incrementally — each plan owns its own red→green transition rather than the entire phase deferring failing tests to a single Wave 0. The strategy is approved as Nyquist-compliant: every code-producing task has an automated `<verify>` and the red test stub precedes the implementation in every plan, so feedback sampling never lags behind production code by more than one task within a plan.
 
 ---
 
@@ -42,7 +45,7 @@ created: 2026-04-29
 | 5-01-02 | 01 | 1 | D-18 | — | milestone-heading memories seeded for v0.1/v0.2/v0.3 | mjs | `node --test tests/fixtures/memories-seeded.test.mjs` | ❌ W0 | ⬜ pending |
 | 5-02-01 | 02 | 2 | D-02 | — | parsePhaseId strips padding, preserves decimals | mjs | `node --test tests/shadow-tests/helpers-parsePhaseId.test.mjs` | ❌ W0 | ⬜ pending |
 | 5-02-02 | 02 | 2 | D-07 | — | deriveDiskStatus returns correct enum for 7 priority cases | mjs | `node --test tests/shadow-tests/helpers-deriveDiskStatus.test.mjs` | ❌ W0 | ⬜ pending |
-| 5-02-03 | 02 | 2 | D-08..D-12 | — | detectDrift emits all 4 kinds + skips natural asymmetries | mjs | `node --test tests/shadow-tests/helpers-detectDrift.test.mjs` | ❌ W0 | ⬜ pending |
+| 5-02-03 | 02 | 2 | D-08..D-12 + refined D-06 | — | detectDrift emits all 4 kinds + skips natural asymmetries; LIVE summary_count divergence exercised (CASE 3 fixture: bd has 2 closed gsd:plan children, disk has 1 SUMMARY.md → drift entry emitted with `kind: 'summary_count', bd_value: 2, disk_value: 1`) | mjs | `node --test tests/shadow-tests/helpers-detectDrift.test.mjs` | ❌ W0 | ⬜ pending |
 | 5-02-04 | 02 | 2 | D-15..D-17 | — | loadMilestoneHeading returns memory value or fallback | mjs | `node --test tests/shadow-tests/helpers-loadMilestoneHeading.test.mjs` | ❌ W0 | ⬜ pending |
 | 5-02-05 | 02 | 2 | D-13 | — | parity helper accepts whitelisted bd-only keys (drift) | mjs | `node --test tests/shadow-tests/_parity-helpers.test.mjs` | ✅ existing (extend) | ⬜ pending |
 | 5-03-01 | 03 | 3 | REQ-READ-01, REQ-QUAL-01 | — | roadmap.analyze parity snapshot exists BEFORE handler (red→green per D-26) | mjs | `node --test tests/shadow-tests/handler-roadmap-analyze.test.mjs` | ❌ W0 | ⬜ pending |
@@ -50,9 +53,9 @@ created: 2026-04-29
 | 5-03-03 | 03 | 3 | REQ-READ-01 SC #2 | — | total_plans matches `bd count -l gsd:plan`; completed_phases matches `bd list -l gsd:phase --status=closed` count | mjs | `node --test tests/shadow-tests/handler-roadmap-analyze-counts.test.mjs` | ❌ W0 | ⬜ pending |
 | 5-03-04 | 03 | 3 | D-19 | — | current-milestone scoping via `git config --worktree gsd-beads.milestone` filters phases[] correctly | mjs | `node --test tests/shadow-tests/handler-roadmap-analyze-milestone-scoping.test.mjs` | ❌ W0 | ⬜ pending |
 | 5-03-05 | 03 | 3 | REQ-QUAL-04 SC #5 | — | non-bd fixture falls through to upstream; backend !== 'beads' | mjs | (one CASE in 5-03-01) | — | ⬜ pending |
-| 5-03-06 | 03 | 3 | D-08..D-12 | — | drift fixture: bd state and disk state intentionally diverged; drift[] populated; stderr line emitted | mjs | `node --test tests/shadow-tests/handler-roadmap-analyze-drift.test.mjs` | ❌ W0 | ⬜ pending |
+| 5-03-06 | 03 | 3 | D-08..D-12 + refined D-06 | — | drift fixture: bd state and disk state intentionally diverged; drift[] populated; LIVE summary_count CASE asserts kind='summary_count', bd_value=2, disk_value=1 + stderr line emitted | mjs | `node --test tests/shadow-tests/handler-roadmap-analyze-drift.test.mjs` | ❌ W0 | ⬜ pending |
 | 5-04-01 | 04 | 3 | REQ-READ-02, REQ-QUAL-01 | — | roadmap.get-phase parity snapshot for known phase number | mjs | `node --test tests/shadow-tests/handler-roadmap-get-phase.test.mjs` | ❌ W0 | ⬜ pending |
-| 5-04-02 | 04 | 3 | REQ-READ-02 SC #3 | — | shared per-phase fields between roadmap.analyze.phases[N] and roadmap.get-phase N are byte-equal | mjs | `node --test tests/shadow-tests/handler-roadmap-cross-handler-parity.test.mjs` | ❌ W0 | ⬜ pending |
+| 5-04-02 | 04 | 3 | REQ-READ-02 SC #3 | — | shared per-phase fields between roadmap.analyze.phases[N] and roadmap.get-phase N are byte-equal (with explicit number↔phase_number, name↔phase_name remap) | mjs | `node --test tests/shadow-tests/handler-roadmap-cross-handler-parity.test.mjs` | ❌ W0 | ⬜ pending |
 | 5-04-03 | 04 | 3 | D-20 | — | unmatched phase number returns `{found: false, phase_number: arg}` (matches upstream) | mjs | (one CASE in 5-04-01) | — | ⬜ pending |
 | 5-05-01 | 05 | 4 | REQ-QUAL-06 (precursor) | — | roadmap.analyze byte-identical across 5 consecutive runs (determinism precursor for Phase 11) | bash | `bash tests/shadow-tests/handler-roadmap-determinism.test.sh` | ❌ W0 | ⬜ pending |
 | 5-05-02 | 05 | 4 | REQ-QUAL-07 (precursor) | — | call-count assertion: ≤2 bd spawns per `roadmap.analyze` invocation regardless of phase count | mjs | `node --test tests/shadow-tests/handler-roadmap-call-count.test.mjs` | ❌ W0 | ⬜ pending |
@@ -69,13 +72,13 @@ created: 2026-04-29
 - [ ] `tests/shadow-tests/handler-roadmap-get-phase.test.mjs` — happy + decimal phase + unmatched (REQ-READ-02, D-20)
 - [ ] `tests/shadow-tests/handler-roadmap-analyze-counts.test.mjs` — total_plans / completed_phases bd-count parity (SC #2)
 - [ ] `tests/shadow-tests/handler-roadmap-analyze-milestone-scoping.test.mjs` — worktree-A v0.2 vs worktree-B v0.3 view (D-19)
-- [ ] `tests/shadow-tests/handler-roadmap-analyze-drift.test.mjs` — 4 drift kinds + natural asymmetry pass-through (D-10..D-12)
-- [ ] `tests/shadow-tests/handler-roadmap-cross-handler-parity.test.mjs` — overlapping fields byte-equal (SC #3)
+- [ ] `tests/shadow-tests/handler-roadmap-analyze-drift.test.mjs` — 4 drift kinds + natural asymmetry pass-through + LIVE summary_count divergence (D-10..D-12 + refined D-06)
+- [ ] `tests/shadow-tests/handler-roadmap-cross-handler-parity.test.mjs` — overlapping fields byte-equal with explicit key remap (SC #3)
 - [ ] `tests/shadow-tests/handler-roadmap-determinism.test.sh` — 5× byte-identical (REQ-QUAL-06 precursor)
 - [ ] `tests/shadow-tests/handler-roadmap-call-count.test.mjs` — ≤2 spawns (REQ-QUAL-07 precursor)
 - [ ] `tests/shadow-tests/helpers-parsePhaseId.test.mjs` — padding strip + decimal preservation (D-02)
 - [ ] `tests/shadow-tests/helpers-deriveDiskStatus.test.mjs` — 7-value enum priority order (D-07)
-- [ ] `tests/shadow-tests/helpers-detectDrift.test.mjs` — drift kinds + asymmetry exclusions (D-10/D-11)
+- [ ] `tests/shadow-tests/helpers-detectDrift.test.mjs` — drift kinds + asymmetry exclusions (D-10/D-11) + LIVE summary_count CASE 3 (refined D-06)
 - [ ] `tests/shadow-tests/helpers-loadMilestoneHeading.test.mjs` — memory hit + fallback (D-15..D-17)
 - [ ] `tests/fixtures/memories-seeded.test.mjs` — verify build-seed.sh emits 3 memory keys (D-18)
 - [ ] `tests/shadow-tests/snapshots/roadmap-analyze.json` — captured upstream shape against gsd-beads ROADMAP.md fixture (D-26)
@@ -83,6 +86,8 @@ created: 2026-04-29
 - [ ] `tests/shadow-tests/_parity-helpers.test.mjs` — extend with whitelist case for `drift` extension key (D-13)
 
 *Wave 0 stubs: write all the above test files with FAILING expectations FIRST (red), then make them pass (green). Per D-26 / REQ-QUAL-01: parity snapshot tests MUST exist before handler implementation; CI fails if either handler omits a key from upstream shape.*
+
+*Per-plan TDD substitution (W5): each Plan 01..05 ships its own RED Task 1 (`tdd="true"`) immediately followed by the GREEN implementation task — Wave 0 happens incrementally per plan rather than as a single front-loaded phase. This pattern satisfies Nyquist sampling because every code-producing task has an automated `<verify>` and red precedes implementation within every plan boundary.*
 
 ---
 
@@ -97,11 +102,13 @@ created: 2026-04-29
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (16 new test files identified above)
-- [ ] No watch-mode flags (`node --test` runs once and exits; bash scripts are one-shot)
-- [ ] Feedback latency < 5s (quick command runs only the 2 handler test files)
-- [ ] `nyquist_compliant: true` set in frontmatter (after planner approves)
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (16 new test files identified above; per-plan TDD substitution)
+- [x] No watch-mode flags (`node --test` runs once and exits; bash scripts are one-shot)
+- [x] Feedback latency < 5s (quick command runs only the 2 handler test files)
+- [x] `nyquist_compliant: true` set in frontmatter (per-plan TDD pattern approved 2026-04-29)
 
-**Approval:** pending
+**Approval:** 2026-04-29 (per-plan TDD pattern)
+</content>
+</invoke>
