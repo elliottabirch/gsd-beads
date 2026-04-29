@@ -9,7 +9,7 @@ files_modified:
   - tests/fixtures/seed.jsonl
   - tests/fixtures/memories-seeded.test.mjs
 autonomous: true
-requirements: []
+requirements: [REQ-READ-01]
 tags:
   - fixture
   - bd-seed
@@ -20,6 +20,7 @@ key_decisions:
   - "Q4 Option A: Extend build-seed.sh to 11 phases + 24 plan children (research recommendation; investing once pays back in Phases 6-9). The 7-phase keep-as-is option was rejected because SC #2 contract is 'count parity with bd', not '11/24 literal' — but extending now lets later phases reuse the larger fixture without a second migration."
   - "phase-id mapping: P11→01, P12→02, P21→03, P22→04, P23→05, P31→06, P32→07. The 4 new phases extend the v0.2 milestone (already in-progress) to bring v0.2 to 7 phases (matching the v0.2 ROADMAP), giving us 11 total across milestones. Plan children attach to v0.2 phases only."
   - "v0.3 deliberately omits the milestone-heading memory to test the fallback path (D-17). v0.1 and v0.2 memories are seeded."
+  - "Plan 01 supplies the phase-id:NN labels + 11-phase / 24-plan fixture that REQ-READ-01 SC #2 validates against (`total_plans == bd count -l gsd:plan` parity needs the substrate)."
 
 must_haves:
   truths:
@@ -48,7 +49,7 @@ must_haves:
 <objective>
 Migrate `tests/fixtures/build-seed.sh` to emit (a) `phase-id:NN` labels on every phase epic per D-03, (b) `gsd-beads:milestone:vX.Y:heading` memories per D-18, and (c) a larger 11-phase / 24-plan fixture per Q4 Option A so SC #2's count-parity assertion has the substrate it requires. Regenerate `seed.jsonl`. Wave 0 test stub `memories-seeded.test.mjs` proves the memory keys land.
 
-Purpose: Phase 5 read handlers cannot lookup phases without `phase-id:NN` labels (D-01/D-02), cannot resolve milestone headings without seeded memory keys (D-15..D-17), and cannot prove SC #2 (`total_plans == bd count -l gsd:plan`) without plan children in the fixture. This plan creates that substrate.
+Purpose: Phase 5 read handlers cannot lookup phases without `phase-id:NN` labels (D-01/D-02), cannot resolve milestone headings without seeded memory keys (D-15..D-17), and cannot prove SC #2 (`total_plans == bd count -l gsd:plan`) without plan children in the fixture. This plan creates that substrate. **REQ-READ-01 SC #2** validates against the substrate this plan supplies.
 
 Output:
 - Edited `tests/fixtures/build-seed.sh` (4 new phases, 24 plan children, 7 `phase-id:NN` labels, 2 `bd remember` invocations)
@@ -230,7 +231,7 @@ BEADS_ACTOR=seed bd remember 'gsd-beads:milestone:vX.Y:heading' '<heading text>'
 
     Total: 4+5+4+3+3+3+2 = 24 plans.
 
-    Loop pattern for each phase (use a bash loop to keep the file readable):
+    Loop pattern for each phase (use a bash loop to keep the file readable). **CRITICAL Pitfall 8: every bd call inside the loop, including `bd link`, MUST be prefixed with `BEADS_ACTOR=seed`** (Phase 4 PITFALL: actor identity must be preserved on every bd invocation, including loop-internal parent-child link calls):
     ```bash
     # Plan children for v0.2 phases (D-03 substrate; SC #2 count parity)
     seed_plans() {
@@ -290,13 +291,14 @@ BEADS_ACTOR=seed bd remember 'gsd-beads:milestone:vX.Y:heading' '<heading text>'
     - `grep -c "bd remember" tests/fixtures/build-seed.sh` returns ≥2 (v0.1 + v0.2 memories)
     - `grep -c "gsd:plan" tests/fixtures/build-seed.sh` returns ≥1 (plan-child label seeding present)
     - `grep -c "bd link" tests/fixtures/build-seed.sh` returns ≥1 (parent-child link seeding present)
+    - `grep -c "BEADS_ACTOR=seed bd link" tests/fixtures/build-seed.sh` returns ≥1 (W8 / Pitfall 8: loop-internal parent-child link calls also honor the actor prefix)
     - `grep -c "version:v0.3:heading" tests/fixtures/build-seed.sh` returns 0 (v0.3 deliberately omitted per D-17)
     - `wc -l tests/fixtures/seed.jsonl` returns ≥35 (11 phases + 24 plans = 35 issue lines, plus possible memory lines if export emits them)
     - `bash tests/shadow-tests/seed-determinism.test.sh` exits 0 (CASE 1 byte-identical + CASE 2 updated counts pass)
     - `node --test tests/fixtures/memories-seeded.test.mjs` exits 0 (3/3 cases pass — Task 1 turns GREEN)
     - `grep -c "BEADS_ACTOR=seed" tests/fixtures/build-seed.sh` returns ≥35 (every bd call uses Pitfall 8 mitigation)
   </acceptance_criteria>
-  <done>build-seed.sh edited; seed.jsonl regenerated with 11 phase epics + 24 plan children + 2 memory keys; seed-determinism.test.sh CASE 2 updated to expected new counts and passes; memories-seeded.test.mjs turns GREEN; all bd calls retain `BEADS_ACTOR=seed` prefix.</done>
+  <done>build-seed.sh edited; seed.jsonl regenerated with 11 phase epics + 24 plan children + 2 memory keys; seed-determinism.test.sh CASE 2 updated to expected new counts and passes; memories-seeded.test.mjs turns GREEN; all bd calls retain `BEADS_ACTOR=seed` prefix (including loop-internal `bd link`).</done>
 </task>
 
 </tasks>
@@ -342,3 +344,5 @@ After completion, create `.planning/phases/05-roadmap-read-handlers/05-01-SUMMAR
 - Memory keys seeded (v0.1, v0.2; v0.3 fallback)
 - Confirm `bash tests/fixtures/build-seed.sh && diff <(...)` produces byte-identical output across two runs
 </output>
+</content>
+</invoke>
