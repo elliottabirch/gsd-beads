@@ -1,33 +1,23 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1
-milestone_name: — Foundation
-status: milestone-complete
-last_updated: "2026-04-28T23:30:00Z"
-current_phase: null
+milestone: v0.2
+milestone_name: Beads-backed reads
+status: planning
+last_updated: "2026-04-29T18:33:56.769Z"
+last_activity: 2026-04-29
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
-last_completed:
-  phase: 03-cross-worktree-validation
-  verification_status: passed
-  score: "30/30"
-  date: 2026-04-28
-session:
-  stopped_at: "Phase 3 complete; v0.1 milestone shipped"
-  resume_file: null
-phases_complete:
-  - phase: 01-spike-validate-beads-gsd-topology
-    completed: pre-2026-04-28
-  - phase: 02-build-the-layer
-    completed: 2026-04-28
-    verification: passed
-    score: "13/13"
-  - phase: 03-cross-worktree-validation
-    completed: 2026-04-28
-    verification: passed
-    score: "30/30"
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
+
+# Project State
+
+## Current Position
+
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-29 — Milestone v0.2 started

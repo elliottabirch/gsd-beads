@@ -3,6 +3,30 @@
 A Claude Code skill + hook layer that integrates the beads issue/dependency
 tracker into the GSD planning workflow.
 
+## Current Milestone: v0.2 Beads-backed reads
+
+**Goal:** Extend the gsd-sdk shadow with read-side handlers so state-bearing
+queries derive their answers from `bd` on beads-managed projects, restoring
+`/gsd-progress`, `/gsd-resume-work`, `/gsd-execute-phase`, and other GSD
+command-surface routing.
+
+**Target features:**
+- `roadmap.analyze` handler — `current_phase`, `next_phase`, plan/summary
+  counts, `progress_percent` from `bd list -l gsd:phase --json` + `bd children`
+- `state-snapshot` handler — `decisions[]` from `bd memories`, blockers from
+  labels, `pending_todos` count from `bd count -l gsd:todo --status=open`
+- `progress.bar` / `progress.json` handlers — percent from `bd count` against
+  `gsd:phase --status=closed` vs total
+- `isBeadsManaged()` fallback in every read handler → upstream passthrough on
+  non-bd projects (regression-safe)
+- Read-handler test coverage in `tests/shadow-tests/`
+- Audit other read queries used by the GSD command surface; bd-back the
+  state-bearing ones, leave narrative-only queries (`summary-extract`) alone
+
+**Key context:** Shadow lives at `bin/gsd-sdk-shadow.mjs`; existing 13
+mutation handlers are the model — `bd … --json` → transform to upstream's
+printer shape → return `{ data: … }`. Non-bd projects must remain unchanged.
+
 ## What it builds
 
 - New skills (`/gsd-beads-init`, `/gsd-beads-add-phase`,
@@ -56,3 +80,23 @@ REQUIREMENTS.md alongside beads.
 - Replacing narrative markdown (PLAN.md, RESEARCH.md, AI-SPEC.md, UI-SPEC.md,
   DISCUSSION-LOG.md).
 - Forking GSD or maintaining patches against upstream.
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
+---
+*Last updated: 2026-04-29 — milestone v0.2 (Beads-backed reads) started*
