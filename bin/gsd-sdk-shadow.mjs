@@ -245,9 +245,13 @@ export function findBeadsRoot(start) {
   let dir;
   try { dir = realpathSync(resolve(start)); } catch { return null; }
   while (true) {
-    if (existsSync(join(dir, '.beads', 'metadata.json'))) return dir;
     const gitMarker = join(dir, '.git');
-    if (existsSync(gitMarker)) {
+    const hasGit = existsSync(gitMarker);
+    if (hasGit) {
+      // Check worktree first: bd init commits .beads/metadata.json into git, so a
+      // worktree always has its own (transitive) .beads/metadata.json copy — but the
+      // real bd state (Dolt store, etc.) lives only in the source repo. We must
+      // resolve to the source repo per REQ-QUAL-03 plan contract.
       const stat = statSync(gitMarker);
       if (stat.isFile()) {
         // Worktree: .git file contains "gitdir: /path/to/source/.git/worktrees/<name>"
@@ -261,9 +265,15 @@ export function findBeadsRoot(start) {
             return sourceRoot;
           }
         }
+        return null;
       }
+      // Regular git repo (.git is a directory): check for .beads/ at this level
+      // (D-02: halt walk at git root). Return dir if bd-managed, else null.
+      if (existsSync(join(dir, '.beads', 'metadata.json'))) return dir;
       return null;
     }
+    // No .git at this level — check for .beads/ then walk up
+    if (existsSync(join(dir, '.beads', 'metadata.json'))) return dir;
     const parent = dirname(dir);
     if (parent === dir) return null;
     dir = parent;
