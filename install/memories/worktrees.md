@@ -16,4 +16,5 @@ Install + recovery:
 
 - macOS: `brew install flock` is required (the discoteq port is util-linux flag-compatible). install.sh's pre-flight blocks install with the same hint if flock is missing.
 - Recovery if the source repo is renamed: from EACH affected worktree run `git config --worktree gsd-beads.dir <new-source-path>/.beads`. There is no runtime self-heal; this is by design.
+- The hooks are installed globally at `~/.claude/hooks/` and pass through silently in projects without `.beads/` (plain GSD projects, worktrees of non-beads repos). Only beads-managed project roots enforce REQ-04.
 - See `docs/WORKTREES.md` for the full setup walkthrough, lifecycle ops (add/remove/reactivate), and the four-failure-mode troubleshooting matrix.

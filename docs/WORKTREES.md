@@ -255,6 +255,23 @@ line 19; you will see it succeed on the next install.
   one minute on a typical developer laptop or WSL2 host (50-55 seconds
   observed across 3 dev runs, see `WORKTREES-EVIDENCE.md`).
 
+## Behavior in non-beads projects
+
+The gsd-beads hooks (`block-state-md.sh`, `block-gsd-sdk-mutation.sh`)
+are installed globally at `~/.claude/hooks/` so Claude Code picks them
+up across every project. Each hook checks the project root for `.beads/`
+and passes through silently when that directory is absent. So:
+
+- Plain GSD projects (no `.beads/`) — state-bearing markdown writes and
+  `gsd-sdk` mutations work normally; the hooks are inert.
+- Worktrees of plain GSD projects — same: the project root has no
+  `.beads/`, hooks pass through.
+- Beads-managed projects (this repo, projects after `./install.sh`) —
+  hooks enforce REQ-04 fully.
+
+The guard resolves project root from `CLAUDE_PROJECT_DIR` (set by
+Claude Code) or the hook payload's `cwd` field, falling back to `$PWD`.
+
 ## See also
 
 - `install/memories/worktrees.md` — bd memory #8, surfaces at every

@@ -211,3 +211,38 @@ No regressions introduced by 02-07. The diff is surgical: 9 insertions / 1 delet
 _Re-Verified: 2026-04-28T18:00:00Z_
 _Verifier: Claude (gsd-verifier)_
 _Prior verification: 2026-04-28T13:00:00Z (gaps_found, 11/13)_
+
+---
+
+## Discovered Post-Verification
+
+> Items found AFTER this verification ran (Phase 02 already marked passed and
+> shipped). Recorded here as a feedback log; no re-verification needed.
+
+### 2026-04-28 — Hooks fired in non-beads projects (fixed in commit b51abbc)
+
+`block-state-md.sh` and `block-gsd-sdk-mutation.sh` are installed globally
+at `~/.claude/hooks/` by `install.sh`, so Claude Code picks them up in
+every project. The Phase 02 hooks had no project-level guard — they
+fired on every Claude Code project including plain GSD projects and
+worktrees that don't carry `.beads/`. State writes and `gsd-sdk`
+mutations were blocked spuriously in those projects.
+
+**Fix:** Added a `.beads/` directory check at the top of each hook.
+Resolves project root from `CLAUDE_PROJECT_DIR` → payload `cwd` → `$PWD`,
+passes through silently when no `.beads/` exists. Tests extended:
+block-state-md 30→33 cases (CASE 31-33 cover the non-beads guard);
+block-gsd-sdk-mutation 43→46 cases (3 non-beads guard cases).
+
+**Detection vector:** Dogfooded — author noticed hook denials in unrelated
+GSD projects after running `./install.sh` on this repo.
+
+**Why the original verifier missed it:** Phase 02 verification ran inside
+this repo, where `.beads/` exists, so the deny-on-state-write behavior
+was correct from the verifier's vantage point. Cross-project behavior
+wasn't part of the verification surface.
+
+**Future-proofing:** The guard pattern is now baked into both hooks;
+future hooks should follow the same check. Documented in
+`install/memories/worktrees.md` and `docs/WORKTREES.md`
+("Behavior in non-beads projects" section).
