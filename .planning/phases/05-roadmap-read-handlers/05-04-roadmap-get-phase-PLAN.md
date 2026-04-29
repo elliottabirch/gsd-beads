@@ -25,13 +25,14 @@ key_decisions:
   - "section field strategy: get-phase's section is raw markdown of the phase section. For bd-backed: assemble synthetic markdown from bd fields (title + description). DO NOT read .planning/ROADMAP.md (that defeats the bd-source-of-truth contract). The synthetic section starts with '### Phase <N>: <name>' line followed by the description body verbatim. This produces a stable string for parity testing."
   - "success_criteria parsing: extract from bead description by matching the 'Success Criteria:' heading and capturing subsequent bulleted/numbered list items until next heading. Spike 007 (gsd-ecosystem-integration.md) established this convention. When description is empty (current build-seed.sh phases have no description body), success_criteria = []."
   - "Wave assignment: Plan 04 is Wave 4 sequential after Plan 03. Both modify bin/gsd-sdk-shadow.mjs so they cannot parallelize per file-ownership rules. Tests live in distinct files but the source-of-truth handler module is shared."
+  - "Cross-handler key-name remap: roadmap.analyze emits `number, name` while roadmap.get-phase emits `phase_number, phase_name`. The cross-handler-parity test MUST explicitly remap these key names (not just compare object shapes) — the test asserts SAME VALUES under DIFFERENT keys. Acceptance criterion grep enforces the remap is visible in the test code."
 
 must_haves:
   truths:
     - "On a beads-managed fixture, gsd-sdk query roadmap.get-phase 5 returns { data: { found: true, phase_number: '5', phase_name: <string>, goal: <string|null>, success_criteria: <string[]>, section: <string>, backend: 'beads' } }"
     - "Decimal phase IDs work: roadmap.get-phase 72.1 returns the phase bead labeled phase-id:72.1 (or {found:false,phase_number:'72.1'} when absent — D-20 unmatched shape)"
     - "Unmatched phase number returns { data: { found: false, phase_number: <arg>, backend: 'beads' } } per D-20 (matches upstream's unmatched shape from query/roadmap.js:359)"
-    - "Cross-handler parity (SC #3): for any phase N present in both handlers' outputs, the OVERLAPPING fields (phase_number, phase_name, goal) are byte-equal between roadmap.analyze.phases[N] and roadmap.get-phase N"
+    - "Cross-handler parity (SC #3): for any phase N present in both handlers' outputs, the OVERLAPPING semantic fields (phase_number, phase_name, goal) are byte-equal between roadmap.analyze.phases[N] (under keys `number`, `name`, `goal`) and roadmap.get-phase N (under keys `phase_number`, `phase_name`, `goal`)"
     - "Parity snapshot tests/shadow-tests/snapshots/roadmap-get-phase.json exists, was captured from upstream BEFORE handler implementation (red->green per D-26), AND matches upstream's roadmapGetPhase shape (found, phase_number, phase_name, goal, success_criteria, section)"
     - "On a non-bd fixture, gsd-sdk query roadmap.get-phase 1 falls through to upstream (no backend: 'beads' in response) per SC #5"
   artifacts:
@@ -45,7 +46,7 @@ must_haves:
     - path: "tests/shadow-tests/handler-roadmap-get-phase.test.mjs"
       provides: "Parity + happy + decimal + unmatched + non-bd passthrough"
     - path: "tests/shadow-tests/handler-roadmap-cross-handler-parity.test.mjs"
-      provides: "SC #3 byte-equality of overlapping keys between analyze and get-phase"
+      provides: "SC #3 byte-equality of overlapping keys between analyze and get-phase (with explicit number↔phase_number, name↔phase_name remap)"
   key_links:
     - from: "BEADS_READ_OVERRIDES"
       to: "registry.register dispatch"
@@ -57,12 +58,12 @@ must_haves:
       pattern: "bd.*export.*--json"
     - from: "handler-roadmap-cross-handler-parity.test.mjs"
       to: "both handlers' outputs for the same phase number"
-      via: "spawn shadow twice (once per handler), assert.deepStrictEqual on overlapping subset"
+      via: "spawn shadow twice (once per handler), assert.deepStrictEqual on overlapping subset with key remap"
       pattern: "deepStrictEqual"
 ---
 
 <objective>
-Implement `beadsRoadmapGetPhase`, the second Phase 5 read handler, satisfying REQ-READ-02 + SC #3 (cross-handler parity for overlapping keys) + SC #5 (non-bd passthrough). Capture upstream parity snapshot for phase 5 (a known v0.2 phase). Write 2 test files (per-handler + cross-handler-parity) before turning the handler GREEN.
+Implement `beadsRoadmapGetPhase`, the second Phase 5 read handler, satisfying REQ-READ-02 + SC #3 (cross-handler parity for overlapping keys with explicit key remap) + SC #5 (non-bd passthrough). Capture upstream parity snapshot for phase 5 (a known v0.2 phase). Write 2 test files (per-handler + cross-handler-parity) before turning the handler GREEN.
 
 Purpose: `/gsd-progress` and other consumers query phase data either through the milestone-wide `roadmap.analyze` or the targeted `roadmap.get-phase <N>`. Both must produce consistent overlap-key data so consumers can switch query shape without inconsistencies. This plan locks that consistency in via a dedicated cross-handler test.
 
@@ -205,11 +206,26 @@ Output:
 
     handler-roadmap-cross-handler-parity.test.mjs (SC #3 — 2+ cases):
 
-    - CASE 1 (overlapping keys byte-equal): Build same beads-managed v0.2 fixture. Run shadow twice: once `query roadmap.analyze`, once `query roadmap.get-phase 5`. Parse both. Find phase 5 in analyze.phases[]. Compare:
+    - CASE 1 (overlapping keys byte-equal with EXPLICIT KEY REMAP): Build same beads-managed v0.2 fixture. Run shadow twice: once `query roadmap.analyze`, once `query roadmap.get-phase 5`. Parse both. Find phase 5 in analyze.phases[]. Compare:
       - `analyzePhase5.number === getPhaseResult.phase_number`  (note: key NAME differs — `number` vs `phase_number`; SC #3 says "byte-equal in the overlapping keys" which should be read as "for the same semantic field, both handlers emit the same value". Document this in test comments: the OVERLAPPING SEMANTIC FIELDS are number/phase_number, name/phase_name, goal. The values must be byte-equal even though the key names differ between handlers.)
       - `analyzePhase5.name === getPhaseResult.phase_name`
       - `analyzePhase5.goal === getPhaseResult.goal`
-    Use `assert.deepStrictEqual` on the extracted overlapping-fields object: `assert.deepStrictEqual({ phase_number: analyzePhase5.number, phase_name: analyzePhase5.name, goal: analyzePhase5.goal }, { phase_number: getPhaseResult.phase_number, phase_name: getPhaseResult.phase_name, goal: getPhaseResult.goal })`.
+    Use `assert.deepStrictEqual` on the extracted overlapping-fields object **with EXPLICIT key remap visible in the test source**:
+    ```javascript
+    // EXPLICIT REMAP: roadmap.analyze emits `number`/`name`; roadmap.get-phase emits `phase_number`/`phase_name`.
+    // The cross-handler-parity invariant asserts SAME VALUES under DIFFERENT keys.
+    const analyzeRemapped = {
+      phase_number: analyzePhase5.number,    // remap: number → phase_number
+      phase_name: analyzePhase5.name,        // remap: name → phase_name
+      goal: analyzePhase5.goal,
+    };
+    const getPhaseSubset = {
+      phase_number: getPhaseResult.phase_number,
+      phase_name: getPhaseResult.phase_name,
+      goal: getPhaseResult.goal,
+    };
+    assert.deepStrictEqual(analyzeRemapped, getPhaseSubset);
+    ```
 
     - CASE 2 (single bd export call shared semantics): Both handlers use the same bd export source for the phase data; verify by running them twice each (4 total queries) and asserting all 4 outputs deterministically agree on the overlapping semantic fields. Tests REQ-QUAL-06 (deterministic ordering precursor) — even though the formal precursor lands in Plan 05.
 
@@ -221,6 +237,8 @@ Output:
     Create the 2 test files. Helper extraction: if a `setupBdFixtureWithPhases(t)` helper was inlined in Plan 03 tests, consider extracting to `tests/shadow-tests/_handler-test-helpers.mjs` now (used by 6 test files: 4 from Plan 03 + 2 here). The underscore-prefix convention (Phase 4 D-15) marks it as a non-handler test utility.
 
     Acceptance for the extraction decision: if the helper body exceeds ~30 lines and is duplicated across >=3 files, extract. Otherwise inline. (Plan 03's helpers were per-file; if Task 1 of Plan 04 inlines too, total LOC is ~120 — extraction saves ~80 LOC.)
+
+    The cross-handler-parity test MUST contain explicit `number → phase_number` and `name → phase_name` remap commentary AND code (verified by W7 grep gate in acceptance criteria).
 
     Per D-26 (red phase): both files fail at end of Task 2. Verify red signal:
 
@@ -237,11 +255,12 @@ Output:
     - `grep -c "snapshots/roadmap-get-phase.json" tests/shadow-tests/handler-roadmap-get-phase.test.mjs` returns >=1 (loads the captured snapshot)
     - `grep -c "deepStrictEqual" tests/shadow-tests/handler-roadmap-cross-handler-parity.test.mjs` returns >=1 (uses strict equality for SC #3)
     - `grep -c "roadmap.analyze" tests/shadow-tests/handler-roadmap-cross-handler-parity.test.mjs` returns >=1 (cross-handler test invokes BOTH handlers)
+    - **W7 / cross-handler key remap visibility:** `grep -cE 'number.*phase_number|phase_name.*name' tests/shadow-tests/handler-roadmap-cross-handler-parity.test.mjs` returns ≥1 (proves key remapping is explicit in the test code — analyze emits `number`/`name`, get-phase emits `phase_number`/`phase_name`; the remap is part of the SC #3 contract)
     - `grep -c "phase-id:72.1" tests/shadow-tests/handler-roadmap-get-phase.test.mjs` returns >=1 (decimal phase test exists per D-02)
     - `grep -c "found.*false" tests/shadow-tests/handler-roadmap-get-phase.test.mjs` returns >=1 (unmatched case per D-20)
     - At Task 2 completion (red): combined run produces >=5 failures (handler not implemented)
   </acceptance_criteria>
-  <done>2 test files committed; deterministic red signal; the contracts for Task 3 are now in repo.</done>
+  <done>2 test files committed; deterministic red signal; the contracts for Task 3 are now in repo (cross-handler key remap is explicit per W7).</done>
 </task>
 
 <task type="auto">
@@ -270,6 +289,8 @@ Output:
      * Cross-handler parity (SC #3): the overlapping semantic fields (phase_number,
      * phase_name, goal) MUST match roadmap.analyze.phases[N] byte-for-byte. The
      * non-overlapping fields (success_criteria, section) are unique to get-phase.
+     * KEY REMAP: roadmap.analyze emits `number`/`name`; this handler emits `phase_number`/`phase_name`.
+     * The cross-handler-parity test asserts SAME VALUES under DIFFERENT keys.
      */
     async function beadsRoadmapGetPhase(args, projectDir, _workstream) {
       // Argument validation (graceful — return {found:false} rather than throw, so
@@ -309,12 +330,13 @@ Output:
       }
 
       // Extract fields from bead (matching analyze handler's extraction logic exactly
-      // so SC #3 cross-handler parity holds for overlapping semantic fields)
+      // so SC #3 cross-handler parity holds for overlapping semantic fields, even with
+      // the key-name remap: analyze→number, get-phase→phase_number; analyze→name, get-phase→phase_name)
       const desc = phaseBead.description ?? '';
       const goalMatch = desc.match(/^Goal:\s*(.+)$/m);
       const goal = goalMatch ? goalMatch[1].trim() : null;
 
-      // Strip "Phase NN: " prefix from name — same logic as analyze
+      // Strip "Phase NN: " prefix from name — same logic as analyze (CRITICAL for cross-handler parity)
       const phase_name = phaseBead.title
         .replace(/^v?\d+(\.\d+)?\s+Phase\s+[A-Z]?\d*:\s*/, '')
         .replace(/^Phase\s+\d+(\.\d+)?:\s*/, '');
@@ -360,7 +382,7 @@ Output:
     Iterate until both new test files are GREEN. Common iteration points:
     - Phase title regex stripping (CASE 2 may complain that phase_name still contains "v0.2 Phase B: " prefix — refine the regex)
     - Empty arg handling (CASE 6: ensure no exception escapes; the {found:false} early return is the contract)
-    - SC #3 cross-handler parity (the cross-handler test checks that the SAME source bead produces SAME values via two code paths — both handlers MUST use identical extraction logic; if they diverge in `name` regex stripping, SC #3 fails)
+    - SC #3 cross-handler parity (the cross-handler test checks that the SAME source bead produces SAME values via two code paths — both handlers MUST use identical extraction logic; if they diverge in `name` regex stripping, SC #3 fails — even with the key-name remap, the VALUES under those keys must agree)
 
     Run full Phase 5 suite + bd allowlist to confirm no regression:
 
@@ -381,7 +403,7 @@ Output:
     - seed-determinism still green: `bash tests/shadow-tests/seed-determinism.test.sh` exits 0
     - Lockfile pin still green: `bash tests/install-tests/upstream-version-pin.test.sh` exits 0
   </acceptance_criteria>
-  <done>beadsRoadmapGetPhase implemented and registered; cross-handler parity (SC #3) green; both new test files green; full suite green; allowlist intact.</done>
+  <done>beadsRoadmapGetPhase implemented and registered; cross-handler parity (SC #3) green with explicit key remap honored; both new test files green; full suite green; allowlist intact.</done>
 </task>
 
 </tasks>
@@ -404,7 +426,7 @@ Output:
 
 <verification>
 After all 3 tasks:
-- Both new test files green; cross-handler parity proven for overlapping semantic fields
+- Both new test files green; cross-handler parity proven for overlapping semantic fields with explicit key remap
 - Full shadow test suite green
 - bd allowlist + seed-determinism + memories-seeded + upstream-version-pin all green
 - Manual smoke: `node bin/gsd-sdk-shadow.mjs query roadmap.get-phase 5 --project-dir <gsd-beads-fixture>` returns `{data:{found:true, phase_number:'5', ..., backend:'beads'}}`
@@ -413,7 +435,7 @@ After all 3 tasks:
 
 <success_criteria>
 - REQ-READ-02 satisfied: roadmap.get-phase returns upstream-compatible single-phase shape on bd-managed projects
-- SC #3: overlapping semantic fields byte-equal between roadmap.analyze.phases[N] and roadmap.get-phase N
+- SC #3: overlapping semantic fields byte-equal between roadmap.analyze.phases[N] and roadmap.get-phase N (with explicit number↔phase_number, name↔phase_name remap visible in cross-handler-parity test)
 - SC #4: parity snapshot file existed before handler implementation (verified by git log + file timestamps)
 - SC #5: non-bd fixture passes through to upstream
 - D-02 decimal preservation: phase-id:72.1 lookup works for both handlers
@@ -423,9 +445,11 @@ After all 3 tasks:
 <output>
 After completion, create `.planning/phases/05-roadmap-read-handlers/05-04-SUMMARY.md` documenting:
 - Final handler line range in bin/gsd-sdk-shadow.mjs
-- Cross-handler parity proof: same bead → same overlapping field values via two code paths
+- Cross-handler parity proof: same bead → same overlapping field values via two code paths (with explicit key remap)
 - Snapshot capture method: SYNTHETIC_FIXTURE constant shared between analyze + get-phase entries
 - success_criteria parsing convention (Spike 007 format contract reference)
 - section synthesis strategy (assembled from bd description, NOT from ROADMAP.md disk)
 - Wave 0 → GREEN transition: 2 test files written red first, handler made each pass deterministically
 </output>
+</content>
+</invoke>
