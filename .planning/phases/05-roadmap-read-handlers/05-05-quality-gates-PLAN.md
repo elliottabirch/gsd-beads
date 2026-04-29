@@ -8,7 +8,7 @@ files_modified:
   - tests/shadow-tests/handler-roadmap-determinism.test.sh
   - tests/shadow-tests/handler-roadmap-call-count.test.mjs
 autonomous: true
-requirements: []
+requirements: [REQ-READ-01, REQ-READ-02]
 tags:
   - quality-gates
   - determinism-precursor
@@ -21,6 +21,7 @@ key_decisions:
   - "REQ-QUAL-05 (allowlist): no new test added — bd-allowlist-grep.test.sh already covers `bin/gsd-sdk-shadow.mjs`. Plan 05 only verifies the allowlist test still passes after Plans 03/04 added `bd export` and `bd memories` invocations (both subcommands are in the allowlist; this is a sanity check, not new coverage)."
   - "Plan 05 does NOT implement Phase 11's transitive verification (REQ-VERIFY-02) or full perf gate (REQ-QUAL-07's 500ms budget). Those need 50-phase fixture + 5-run determinism + cross-handler perf tests; Phase 11 lands them."
   - "Phase 11 will extend handler-roadmap-determinism.test.sh and handler-roadmap-call-count.test.mjs to cover other read handlers as they ship (progress.json, state.json, etc.) — establishing the file-naming convention here lets Phase 11 reuse the structure."
+  - "Plan 05 covers BOTH REQ-READ-01 (roadmap.analyze handler shipped in Plan 03) and REQ-READ-02 (roadmap.get-phase handler shipped in Plan 04) — the determinism + call-count regression gates protect both handlers against future N+1 spawn or ordering regressions."
 
 must_haves:
   truths:
@@ -30,9 +31,9 @@ must_haves:
     - "bd-allowlist-grep.test.sh continues to pass after Plans 03/04 added export+memories invocations to bin/gsd-sdk-shadow.mjs (the allowlist contains both subcommands; precondition holds)"
   artifacts:
     - path: "tests/shadow-tests/handler-roadmap-determinism.test.sh"
-      provides: "5x byte-identical roadmap.analyze on canonical fixture (REQ-QUAL-06 precursor)"
+      provides: "5x byte-identical roadmap.analyze on canonical fixture (REQ-QUAL-06 precursor) — protects REQ-READ-01 + REQ-READ-02"
     - path: "tests/shadow-tests/handler-roadmap-call-count.test.mjs"
-      provides: "<=2 bd spawns per roadmap.analyze invocation; <=1 per roadmap.get-phase (REQ-QUAL-07 precursor)"
+      provides: "<=2 bd spawns per roadmap.analyze invocation; <=1 per roadmap.get-phase (REQ-QUAL-07 precursor) — protects REQ-READ-01 + REQ-READ-02"
   key_links:
     - from: "handler-roadmap-determinism.test.sh"
       to: "tests/fixtures/seed.jsonl"
@@ -45,7 +46,7 @@ must_haves:
 ---
 
 <objective>
-Land per-handler quality gates (determinism + call-count) for the two Phase 5 handlers. These are precursors to Phase 11's full REQ-QUAL-04..07 enforcement; landing them now means Phases 6-9 inherit the test pattern and Phase 11's job is extending coverage rather than building from scratch.
+Land per-handler quality gates (determinism + call-count) for the two Phase 5 handlers (REQ-READ-01 + REQ-READ-02). These are precursors to Phase 11's full REQ-QUAL-04..07 enforcement; landing them now means Phases 6-9 inherit the test pattern and Phase 11's job is extending coverage rather than building from scratch.
 
 Purpose: Phase 11 will be a cross-cutting verification phase. Pre-existing per-handler determinism/call-count tests reduce Phase 11's risk surface (any read handler that breaks determinism or N+1 spawns is caught in its own phase). REQ-QUAL-05 allowlist verification is also confirmed here as a regression check after Plans 03/04 added new bd subcommand calls.
 
@@ -185,7 +186,7 @@ Output:
     - `bash tests/shadow-tests/handler-roadmap-determinism.test.sh` exits 0 (both cases pass)
     - Test runtime <=10s (5×2=10 shadow invocations × ~0.5s each = ~5s; budget bound)
   </acceptance_criteria>
-  <done>5x byte-identical assertion green for both roadmap.analyze and roadmap.get-phase. Determinism precursor for Phase 11 in place.</done>
+  <done>5x byte-identical assertion green for both roadmap.analyze and roadmap.get-phase. Determinism precursor for Phase 11 in place; protects REQ-READ-01 + REQ-READ-02 from future ordering regressions.</done>
 </task>
 
 <task type="auto">
@@ -338,7 +339,7 @@ Output:
     - The test does NOT modify production code; only verifies handler call counts via PATH-mocking
     - Test runtime <=10s
   </acceptance_criteria>
-  <done>Call-count budget enforcement green for both handlers. Phase 11 precursor in place; the test catches future N+1 regressions before they ship.</done>
+  <done>Call-count budget enforcement green for both handlers. Phase 11 precursor in place; the test catches future N+1 regressions before they ship; protects REQ-READ-01 + REQ-READ-02.</done>
 </task>
 
 <task type="auto">
@@ -432,3 +433,5 @@ After completion, create `.planning/phases/05-roadmap-read-handlers/05-05-SUMMAR
 
 This SUMMARY closes Phase 5. /gsd-verify-work runs next.
 </output>
+</content>
+</invoke>
