@@ -12,6 +12,15 @@ if [ ! -f "$HOOK" ]; then
   exit 1
 fi
 
+# The hook now passes through when the project root has no .beads/ — that
+# guards the global-install case where it would otherwise fire on every
+# project. Tests construct a real temp dir with .beads/ to exercise the
+# state-bearing branch and a separate dir without .beads/ for the guard.
+BEADS_PROJECT=$(mktemp -d)
+mkdir -p "$BEADS_PROJECT/.beads"
+NON_BEADS_PROJECT=$(mktemp -d)
+trap 'rm -rf "$BEADS_PROJECT" "$NON_BEADS_PROJECT"' EXIT
+
 pass=0
 fail=0
 
@@ -22,10 +31,11 @@ run_test() {
   local payload
   payload=$(jq -n \
     --arg cmd "$cmd" \
+    --arg cwd "$BEADS_PROJECT" \
     '{
       session_id: "spike12",
       transcript_path: "/tmp/x.jsonl",
-      cwd: "/tmp",
+      cwd: $cwd,
       permission_mode: "default",
       hook_event_name: "PreToolUse",
       tool_name: "Bash",
@@ -34,7 +44,7 @@ run_test() {
     }')
 
   local stdout
-  stdout=$(printf '%s' "$payload" | "$HOOK" 2>/dev/null) || true
+  stdout=$(printf '%s' "$payload" | env -u CLAUDE_PROJECT_DIR "$HOOK" 2>/dev/null) || true
 
   local got
   if [ -z "$stdout" ]; then
@@ -119,6 +129,38 @@ run_test "allow-gsd-sdk-no-query"       "gsd-sdk init"                          
 run_test "allow-gsd-sdk-help"           "gsd-sdk --help"                                            "allow"
 run_test "allow-gsd-sdk-with-flags"     "gsd-sdk --project-dir /x query progress"                   "allow"
 run_test "deny-with-flags"              "gsd-sdk --project-dir /x query phase.add 'New phase'"      "deny"
+
+echo ""
+echo "=== Non-beads project guard: should ALLOW (regression for global-install bug) ==="
+# When the hook is registered globally in ~/.claude/settings.json it fires
+# in every project. These cases would otherwise hit the deny-list, but with
+# no .beads/ at the project root the hook must pass through.
+run_non_beads_test() {
+  local name="$1"; local cmd="$2"
+  local payload
+  payload=$(jq -n \
+    --arg cmd "$cmd" \
+    --arg cwd "$NON_BEADS_PROJECT" \
+    '{
+      session_id: "spike12",
+      transcript_path: "/tmp/x.jsonl",
+      cwd: $cwd,
+      permission_mode: "default",
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: $cmd, description: "test" },
+      tool_use_id: "toolu_test"
+    }')
+  local stdout
+  stdout=$(printf '%s' "$payload" | env -u CLAUDE_PROJECT_DIR "$HOOK" 2>/dev/null) || true
+  local got
+  if [ -z "$stdout" ]; then got="allow"; else got=$(printf '%s' "$stdout" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'); fi
+  local status; if [ "$got" = "allow" ]; then status="PASS"; pass=$((pass+1)); else status="FAIL"; fail=$((fail+1)); fi
+  printf '  [%s] %-40s expect=allow got=%-5s "%s"\n' "$status" "$name" "$got" "$cmd"
+}
+run_non_beads_test "non-beads-phase.add"            "gsd-sdk query phase.add 'Phase 5: New feature'"
+run_non_beads_test "non-beads-roadmap.update-plan"  "gsd-sdk query roadmap.update-plan-progress --plan 81-01 --status complete"
+run_non_beads_test "non-beads-milestone.complete"   "gsd-sdk query milestone.complete v1.0"
 
 echo ""
 echo "=== Summary ==="

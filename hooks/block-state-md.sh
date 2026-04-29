@@ -24,6 +24,14 @@ if [ -z "$file_path" ]; then
   exit 0
 fi
 
+# Beads-managed-only: when registered globally in ~/.claude/settings.json
+# this hook fires on every project. Without this guard, plain GSD projects
+# and git worktrees that don't carry .beads/ get their state writes blocked
+# spuriously. Pass through when project root has no .beads/.
+project_dir="${CLAUDE_PROJECT_DIR:-$(printf '%s' "$payload" | jq -r '.cwd // empty')}"
+[ -z "$project_dir" ] && project_dir="$PWD"
+[ -d "$project_dir/.beads" ] || exit 0
+
 # Normalize to a project-relative form by stripping a known prefix if present.
 # Hook receives absolute paths; we match by suffix.
 # Both absolute (*/.planning/X) and relative (.planning/X) forms are matched

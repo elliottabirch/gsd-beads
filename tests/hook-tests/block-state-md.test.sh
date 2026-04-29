@@ -14,6 +14,15 @@ fi
 
 FAKE_ROOT="/work/fake-gsd-project"
 
+# Tests must simulate a beads-managed project root; the hook now passes
+# through when no .beads/ exists at the project root (so the global-
+# installed hook doesn't fire on plain GSD projects). We construct a real
+# temp dir with .beads/ and pass it as the payload's cwd.
+BEADS_PROJECT=$(mktemp -d)
+mkdir -p "$BEADS_PROJECT/.beads"
+NON_BEADS_PROJECT=$(mktemp -d)
+trap 'rm -rf "$BEADS_PROJECT" "$NON_BEADS_PROJECT"' EXIT
+
 pass=0
 fail=0
 
@@ -26,10 +35,11 @@ run_block_test() {
   payload=$(jq -n \
     --arg tool "$tool" \
     --arg file_path "$file_path" \
+    --arg cwd "$BEADS_PROJECT" \
     '{
       session_id: "test-runner",
       transcript_path: "/tmp/x.jsonl",
-      cwd: "/tmp",
+      cwd: $cwd,
       permission_mode: "default",
       hook_event_name: "PreToolUse",
       tool_name: $tool,
@@ -113,6 +123,39 @@ else
   echo "  [FAIL] CASE30-missing-file-path expected silent allow, got: $empty_stdout"
   fail=$((fail+1))
 fi
+
+echo ""
+echo "--- NON-BEADS PROJECT GUARD (3 cases) ---"
+# CASE 31-33: When cwd has no .beads/, the hook must pass through. This
+# guards the global-install bug where ~/.claude/hooks/block-state-md.sh
+# fired on every project including plain GSD projects without beads.
+run_non_beads_test() {
+  local name="$1"; local file_path="$2"
+  local payload
+  payload=$(jq -n \
+    --arg file_path "$file_path" \
+    --arg cwd "$NON_BEADS_PROJECT" \
+    '{
+      session_id: "test-runner",
+      transcript_path: "/tmp/x.jsonl",
+      cwd: $cwd,
+      permission_mode: "default",
+      hook_event_name: "PreToolUse",
+      tool_name: "Edit",
+      tool_input: { file_path: $file_path, content: "anything" },
+      tool_use_id: "toolu_test"
+    }')
+  # Ensure CLAUDE_PROJECT_DIR doesn't override our cwd-based detection
+  local stdout
+  stdout=$(printf '%s' "$payload" | env -u CLAUDE_PROJECT_DIR "$BLOCK_HOOK" 2>/dev/null) || true
+  local got
+  if [ -z "$stdout" ]; then got="allow"; else got=$(printf '%s' "$stdout" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'); fi
+  local status; if [ "$got" = "allow" ]; then status="PASS"; pass=$((pass+1)); else status="FAIL"; fail=$((fail+1)); fi
+  printf '  [%s] %-52s expect=allow got=%s\n' "$status" "$name" "$got"
+}
+run_non_beads_test "CASE31-non-beads-roadmap-allows"    "$FAKE_ROOT/.planning/ROADMAP.md"
+run_non_beads_test "CASE32-non-beads-todo-allows"       "$FAKE_ROOT/.planning/todos/pending/foo.md"
+run_non_beads_test "CASE33-non-beads-rel-roadmap-allow" ".planning/ROADMAP.md"
 
 echo ""
 total=$((pass+fail))

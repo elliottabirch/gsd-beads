@@ -24,6 +24,14 @@ command="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty')"
 # If no command (shouldn't happen for Bash), pass through
 [ -z "$command" ] && exit 0
 
+# Beads-managed-only: when registered globally in ~/.claude/settings.json
+# this hook fires on every project. Without this guard, plain GSD projects
+# and git worktrees that don't carry .beads/ have gsd-sdk mutations blocked
+# spuriously. Pass through when project root has no .beads/.
+project_dir="${CLAUDE_PROJECT_DIR:-$(printf '%s' "$payload" | jq -r '.cwd // empty')}"
+[ -z "$project_dir" ] && project_dir="$PWD"
+[ -d "$project_dir/.beads" ] || exit 0
+
 # Extract the first non-flag argument after `gsd-sdk query`. Handle:
 #   gsd-sdk query phase.add ...
 #   gsd-sdk query phase add ...    (space-delimited alias)
