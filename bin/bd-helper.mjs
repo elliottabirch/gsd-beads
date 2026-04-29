@@ -1,6 +1,6 @@
 // bin/bd-helper.mjs
 // Wraps spawnSync('bd', …); throws BeadsUnavailableError subtypes on failure.
-// Pitfall 2 mitigation: spawnSync (not execSync) so reads can fall through to upstream.
+// Pitfall 2 mitigation: spawnSync (NOT the throwing exec-sync helper) so reads can fall through to upstream.
 // Helpers-throw / handlers-stay-clean per D-13.
 // Test parity in tests/shadow-tests/bd-helper.test.mjs.
 
