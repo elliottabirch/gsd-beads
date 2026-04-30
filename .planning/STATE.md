@@ -1,8 +1,8 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: BeadsAdapter implementation (post-fork)
-status: scoping
+milestone: v0.3
+milestone_name: Adapter prep
+status: planning
 last_updated: "2026-04-30T00:00:00.000Z"
 last_activity: 2026-04-30
 progress:
@@ -15,25 +15,77 @@ superseded_milestones:
   - id: v0.1
     name: Foundation
     status: complete
-    note: Spike + initial layer + cross-worktree validation. Carries forward.
+    note: Spike + initial layer + cross-worktree validation. Carries forward to v1.0.
   - id: v0.2
     name: Beads-backed reads
     status: superseded
-    note: Phase 5/8 complete; remaining 3 phases canceled when shadow approach was abandoned in favor of fork-based adapter interface (2026-04-30). Phase 4-5 work carries forward as input to v1.0 Phase 6 (BeadsAdapter implementation).
+    note: Phase 5/8 complete; remaining 3 phases canceled when shadow approach was abandoned in favor of fork-based adapter interface (2026-04-30). All v0.2 reusable work carries forward to v1.0 BeadsAdapter implementation.
 ---
 
 # Project State
 
 ## Current Position
 
-Milestone: v1.0 (BeadsAdapter implementation against forked GSD)
-Status: scoping — pending GitHub fork creation
+Milestone: v0.3 (Adapter prep)
+Status: planning — ready for `/gsd-new-milestone` to formalize, then
+`/gsd-discuss-phase 1` to scope the cleanup
 Last activity: 2026-04-30
 
-## Architectural pivot (2026-04-30)
+## Reference
 
-The v0.2 shadow architecture was abandoned after the fork-investigation
-research found it had a hard ceiling:
+- **Project core value:** Implement a `BeadsAdapter` against the fork's
+  `StorageAdapter` interface (`~/code/get-shit-done` on
+  `feat/storage-adapter`); ship a bd-backed storage option for any GSD
+  project that opts in.
+- **Independent version line:** this repo (gsd-beads) tracks its own
+  versions (v0.3 next, then v1.0). The fork has its own v1.0 milestone
+  (StorageAdapter interface). Don't conflate them.
+- **v0.3 scope:** archive shadow code, restructure as adapter library
+  scaffold, preserve carry-forward primitives. Single phase. No fork
+  dependency.
+- **v1.0 scope:** BeadsAdapter implementation against fork interface.
+  Waits for fork's Phase 1 to ship. Refined when interface stabilizes.
+
+## v0.3 milestone scope
+
+**Goal:** Clean up the v0.2 shadow architecture; restructure this repo
+as a proper adapter library; preserve all carry-forward primitives.
+
+**Single phase, fixed scope:**
+- Archive shadow code to `archive/v0.2-shadow/`:
+  - `bin/gsd-sdk-shadow.mjs`, `bin/wrap-mutation.mjs`
+  - `hooks/block-gsd-sdk-mutation.sh`, `hooks/block-state-md.sh`
+  - Most of `hooks/bd-sync.sh` (cascade-trigger logic stays useful)
+  - `scripts/regen-roadmap.sh`, `scripts/regen-requirements.sh`
+- Carry-forward primitives moved to `src/` layout:
+  - `src/bd/helper.mjs` ← `bin/bd-helper.mjs`
+  - `src/bd/errors.mjs` ← `bin/beads-errors.mjs`
+  - `src/bd/findRoot.mjs` ← extracted from shadow's `findBeadsRoot`
+  - `src/format/phase.mjs` ← phase-format module (placeholder; logic in v1.0)
+  - `src/helpers/parsePhaseId.mjs` ← from shadow
+  - `src/helpers/deriveDiskStatus.mjs` ← from shadow
+  - `src/helpers/loadMilestoneHeading.mjs` ← from shadow
+  - `src/adapter.mjs` ← BeadsAdapter placeholder (throws not-implemented)
+- `package.json` rewrite: adapter library shape (exports map, no bin
+  entries, peer dep on fork)
+- `install.sh` rewrite or removal (no more global hook installation)
+- `README.md` + `CLAUDE.md` updated to reflect post-cleanup architecture
+- Tests preserved: `tests/fixtures/` stays canonical;
+  `tests/shadow-tests/` half-archived (parity helpers refactored later
+  when v1.0 conformance suite goes in)
+
+**Success criteria:**
+- No active code under `bin/` (archived or moved to `src/`)
+- All shadow hooks archived; nothing self-installs into `~/.claude/`
+- `tests/fixtures/seed.jsonl` still produces byte-identical output via
+  existing helpers
+- PROJECT.md, STATE.md, CLAUDE.md describe post-cleanup state
+- Working tree clean; tagged `v0.3-complete`
+
+## Architectural pivot context
+
+This repo's v0.2 shadow architecture was abandoned 2026-04-30 after the
+fork-investigation found:
 
 - ~334 enumerated direct-I/O leaks across upstream GSD bypass the SDK
   surface entirely (workflows, agents, fat skills using Read/Write/Edit
@@ -43,9 +95,9 @@ research found it had a hard ceiling:
 - Every `/gsd-update` overwrites shadow installations
 - Maintaining handlers in sync with upstream was open-ended
 
-**Decision:** fork upstream `gsd-build/get-shit-done`, add a
-`StorageAdapter` interface (zero behavior change without an adapter),
-and rebuild gsd-beads as a `BeadsAdapter` implementation against that
+The decision: fork upstream and add a `StorageAdapter` interface seam
+(work happens in `~/code/get-shit-done`, branch `feat/storage-adapter`).
+This repo evolves into a `BeadsAdapter` implementation against that
 interface.
 
 See `.planning/DECISIONS.md` for the locked decisions.
@@ -53,88 +105,42 @@ See `.planning/research/fork-investigation/SYNTHESIS.md` for the
 investigation that motivated this pivot (~258 artifacts classified, ~96
 adapter methods proposed, 6 foundational primitives identified).
 
-## v1.0 milestone scope (synthesis-derived)
-
-8 phases (per `.planning/research/fork-investigation/SYNTHESIS.md` §7):
-
-| # | Phase | Repo |
-|---|-------|------|
-| 1 | Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | fork |
-| 2 | Wire core read methods to adapter | fork |
-| 3 | Wire core write methods + `recordStateEvent` | fork |
-| 4 | Plug workflow leaks (top 10 + the `<context>`-block class) | fork |
-| 5 | Foundational primitive lift (`updateSection`, `snapshot/restore`, `putNamedDoc`, `writeBinaryAsset`) | fork |
-| 6 | **BeadsAdapter implementation** | gsd-beads (this repo) |
-| 7 | Conformance test suite (run against both adapters) | both |
-| 8 | Migration + distribution | both |
-
-Phases 1–5 are upstream-fork-side work; gsd-beads (this repo) goes dormant
-until Phase 6.
-
 ## Locked decisions (2026-04-30)
 
-1. **Two-repo model** — `<user>/get-shit-done` (fork) + `gsd-beads`
-   (BeadsAdapter, this repo)
+1. **Two-repo model** — fork (`~/code/get-shit-done`) + gsd-beads (this repo)
 2. **Fork name:** keep `get-shit-done` (no rename)
-3. **Upstream sync model:** periodic rebase against `gsd-build/get-shit-done`
+3. **Upstream sync model:** fork rebases periodically against
+   `gsd-build/get-shit-done`
 4. **Adapter capability negotiation:** `adapter.capabilities = { ... }` flag
+5. **Independent version lines:** fork has its own v1.0; this repo tracks
+   its own v0.3 → v1.0 sequence
+6. **SYNTHESIS.md is canonical** scope input for v1.0 BeadsAdapter
 
-See `.planning/DECISIONS.md` for the full record + rationale.
-
-## Open architectural questions deferred to v1.0 milestone phases
-
-Six remaining open questions (see SYNTHESIS.md §6) are NOT blocking for
-Phase 1; they get answered as the relevant phases approach:
-
-- `commitPlanningState` semantics (Phase 3 blocker)
-- Section-scoped vs whole-file granularity (Phase 5 blocker)
-- 2 raw-git outliers — `spec-phase`/`eval-review` (Phase 4 cleanup)
-- `<context>`-block leak mitigation strategy (Phase 4)
-- Sidecar paths kv-vs-named (Phase 5)
-- Knowledge-graph subsystem scope (Phase 5/6 boundary)
-- "Scratch" record taxonomy (Phase 5)
-- Markdown-and-lockfile helpers visibility (Phase 1 design call)
-- Init-bundle granularity (Phase 2)
-
-## Carry-forward from v0.1 / v0.2
-
-The shadow-architecture code in `bin/gsd-sdk-shadow.mjs` and the hook
-scripts are preserved in this repo as historical reference. They get
-archived (not deleted) during Phase 6 when the BeadsAdapter takes over.
-
-What translates DIRECTLY into Phase 6 (see PROJECT.md "Carry-forward"
-section for the full list):
-
-- 13 spike findings (Spike 002/003/005/007/014 especially)
-- Bead vocabulary conventions (labels, IDs, hierarchy)
-- Helpers: `parsePhaseId`, `deriveDiskStatus`, `detectDrift`,
-  `loadMilestoneHeading`, `findBeadsRoot`
-- Test infrastructure (seed.jsonl, build-seed.sh, seed-fixture.sh,
-  parity helpers)
-- Format-module concept (bidirectional parse/format pair)
-- Determinism contract (`bd init --from-jsonl` byte-identity)
-- Memory-key patterns (with documented forget-sync caveat)
+See `.planning/DECISIONS.md` for full record + rationale.
 
 ## Pending todos
 
-- `disambiguate-bd-managed-detection.md` — out of v0.2 scope when filed;
-  v1.0 Phase 6 BeadsAdapter `init()` step covers this naturally
+- `disambiguate-bd-managed-detection.md` — relevant to v1.0 BeadsAdapter
+  `init()` step (covers detection naturally as part of adapter
+  construction)
 
 ## Session Continuity
 
 Architectural pivot session 2026-04-30:
 - Fork-investigation: 10 batch agents classified ~258 artifacts in
-  parallel (~3-4 hours wall clock)
+  parallel
 - Synthesis: SYNTHESIS.md (6515 words, comprehensive adapter draft)
-- 4 pre-flight decisions locked (DECISIONS.md)
-- PROJECT.md rewritten around adapter-interface model
-- v0.2 milestone superseded; v1.0 scoping
-- Next: user forks `gsd-build/get-shit-done` to `<user>/get-shit-done`,
-  clones locally; new milestone-scoping conversation in the new repo
+- 6 pre-flight decisions locked (DECISIONS.md)
+- PROJECT.md rewritten around adapter-implementation model;
+  v0.2 superseded; v0.3 (adapter prep) scoped
+- Fork repo bootstrapped at `~/code/get-shit-done` on
+  `feat/storage-adapter` branch with `.planning/` mirroring research
+  inputs
 
-Once the fork repo exists, the next concrete actions are:
-1. Bootstrap `.planning/` in the fork repo (or use a different planning
-   strategy native to the fork)
-2. `/gsd-new-milestone` declaring v1.0 with the 8-phase scope above
-3. `/gsd-discuss-phase 1` for the fork bootstrap + adapter interface
-   skeleton + MarkdownAdapter scaffold
+Next: declare v0.3 via `/gsd-new-milestone`, then `/gsd-discuss-phase 1`
+for the cleanup work.
+
+Sibling repo state: fork at `~/code/get-shit-done` is in v1.0 planning
+mode; runs Phases 1-5 of fork milestone; this repo (gsd-beads) waits
+for fork Phase 1 interface to ship before v1.0 BeadsAdapter
+implementation begins.
