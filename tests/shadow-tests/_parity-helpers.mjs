@@ -46,7 +46,9 @@ function typeOf(v) {
 export function assertKeySetParityWithExt(actual, snapshot, extensions = [], path = '') {
   if (snapshot === null) return;
   const here = path || '<root>';
-  if (actual === null) throw new Error(`parity: ${here} snapshot has type ${typeof snapshot}, actual is null`);
+  // Only throw on structural mismatch: snapshot is an object/array but actual is null.
+  // Leaf-level null in actual (snapshot is a primitive) is a valid value difference — not a parity failure.
+  if (actual === null && typeof snapshot === 'object') throw new Error(`parity: ${here} snapshot has type ${typeof snapshot}, actual is null`);
   if (typeof actual !== 'object' || typeof snapshot !== 'object') return;
   if (Array.isArray(snapshot)) {
     if (!Array.isArray(actual)) throw new Error(`parity: ${here} snapshot is array, actual is ${typeof actual}`);

@@ -38,11 +38,21 @@ export function bd(args, { cwd, parseJson = true } = {}) {
   const stdout = result.stdout ?? '';
   if (!parseJson) return stdout;
 
-  // bd's "no issues found" returns an OBJECT not an array (Pitfall — STACK.md:115)
+  // bd's "no issues found" returns an OBJECT not an array (Pitfall — STACK.md:115).
+  // bd export --json returns JSONL (one JSON object per line), not a JSON array.
+  // Detect JSONL by trying JSON.parse first; if it fails, try JSONL parse.
   let parsed;
   try { parsed = JSON.parse(stdout); }
-  catch (err) {
-    throw new BeadsCorrupt(`bd ${args[0]} returned non-JSON: ${stdout.slice(0, 200)}`, { originalError: err });
+  catch {
+    // Not JSON — try JSONL (newline-delimited JSON, each line is a JSON object).
+    const lines = stdout.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    let jsonlParsed;
+    try {
+      jsonlParsed = lines.map(line => JSON.parse(line));
+    } catch (jsonlErr) {
+      throw new BeadsCorrupt(`bd ${args[0]} returned non-JSON: ${stdout.slice(0, 200)}`, { originalError: jsonlErr });
+    }
+    return jsonlParsed;
   }
 
   // Detect bd's empty-error shape: { error: '...', schema_version: 1 }
