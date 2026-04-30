@@ -28,6 +28,12 @@ key_decisions:
   - "summary_count derives from `bd children <phase> -l gsd:plan --status=closed` count per refined D-06 (commit 7feccb8). Drift kind `summary_count` stays LIVE: detectDrift compares the bd closed-plan count against the disk `*-SUMMARY.md` count and emits a drift entry when they diverge. This honors the 'bd is source of truth' principle (cascade-loop auto-closes plan beads when their child tasks complete) while alerting users to filesystem inconsistencies. Plan 02 helper-detectDrift.test.mjs exercises a fixture variant where bd has 2 closed plan beads and disk has 1 SUMMARY.md → drift entry emitted with kind='summary_count', bd_value=2, disk_value=1."
   - "Plan 02 supplies the substrate for both REQ-READ-01 (parsePhaseId/deriveDiskStatus/detectDrift/loadMilestoneHeading consumed by beadsRoadmapAnalyze) and REQ-READ-02 (same helpers consumed by beadsRoadmapGetPhase) — these helpers are the shared substrate for both read handlers."
 
+  Decision References:
+  - D-05: Full 7-value disk_status enum — deriveDiskStatus emits complete | partial | planned | empty | discussed | researched | no_directory (no bd-backend divergence; 4-value collapse rejected per REQ-QUAL-01 parity).
+  - D-09: Drift surfaces via TWO channels — (1) stderr line per drift case: `[gsd-shadow] DRIFT: phase N plan_count bd=X disk=Y`; (2) drift[] array in response data. detectDrift implements both channels; Plan 03 handler wires detectDrift into the emitted response.
+  - D-13: _parity-helpers whitelist (extension keys) — assertKeySetParityWithExt is the new export that whitelists drift[] as a bd-backend-only key present in actual but absent from upstream snapshot. This plan implements the API and adds CASEs 7-8 to _parity-helpers.test.mjs.
+  - D-16: Milestone heading sourced from bd memory key gsd-beads:milestone:<version>:heading — loadMilestoneHeading reads memories[key]; fallback to bare version string when absent (D-17 path). Plan 03 handler calls loadMilestoneHeading once per milestone entry.
+
 must_haves:
   truths:
     - "parsePhaseId('phase-id:05') returns '5'; parsePhaseId('phase-id:72.1') returns '72.1'; parsePhaseId(null/undefined) returns null"
