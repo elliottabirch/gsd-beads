@@ -580,11 +580,102 @@ async function beadsRoadmapAnalyze(_args, projectDir) {
   };
 }
 
+// ─── beadsRoadmapGetPhase ───────────────────────────────────────────────────
+// REQ-READ-02: Single-phase view from bd.
+// D-20: numeric phase identifiers only (whole or decimal). Fuzzy/title matching
+// is Phase 8's find-phase responsibility.
+//
+// Returns {data:{found,phase_number,phase_name,goal,success_criteria,section,backend}}
+// on FOUND case; {data:{found:false,phase_number:arg,backend:'beads'}} on UNMATCHED.
+//
+// Cross-handler parity (SC #3): the overlapping semantic fields (phase_number,
+// phase_name, goal) MUST match roadmap.analyze.phases[N] byte-for-byte. The
+// non-overlapping fields (success_criteria, section) are unique to get-phase.
+// KEY REMAP: roadmap.analyze emits `number`/`name`; this handler emits `phase_number`/`phase_name`.
+// The cross-handler-parity test asserts SAME VALUES under DIFFERENT keys.
+async function beadsRoadmapGetPhase(args, projectDir) {
+  // Argument validation (graceful — return {found:false} rather than throw, so
+  // upstream-shape parity is preserved on usage errors)
+  const phaseArg = args[0];
+  if (!phaseArg) {
+    return { data: { found: false, error: 'Usage: roadmap.get-phase <phase-number>', backend: 'beads' } };
+  }
+
+  // D-24: find bd root or throw BeadsEmpty (dispatcher catches and falls through).
+  const root = findBeadsRoot(projectDir);
+  if (!root) throw new BeadsEmpty('roadmap.get-phase: project is not bd-managed');
+
+  // D-27: SINGLE bd export call — no per-phase fan-out (one spawn budget for get-phase).
+  const allBeads = bd(['export', '--json'], { cwd: root });
+  if (!Array.isArray(allBeads)) {
+    throw new BeadsCorrupt(`bd export --json returned non-array: ${typeof allBeads}`);
+  }
+
+  // D-19: current milestone from worktree git config / env / fallback.
+  const currentMilestone = readGitConfigMilestone(projectDir);
+
+  // D-20 lookup: find phase bead with phase-id:<arg> label.
+  // parsePhaseId normalizes zero-padding: input '5' matches label 'phase-id:05'.
+  // Decimal IDs work: input '72.1' matches label 'phase-id:72.1' (D-02).
+  const phaseBead = allBeads.find(b => {
+    if (!Array.isArray(b.labels)) return false;
+    if (!b.labels.includes('gsd:phase')) return false;
+    if (!b.labels.includes(`version:${currentMilestone}`)) return false;
+    const phaseIdLabel = b.labels.find(l => l.startsWith('phase-id:'));
+    const num = parsePhaseId(phaseIdLabel);
+    return num === phaseArg;
+  });
+
+  if (!phaseBead) {
+    return { data: { found: false, phase_number: phaseArg, backend: 'beads' } };
+  }
+
+  // Extract goal and success_criteria from bead description (Spike 007 format contract).
+  // Currently build-seed.sh creates phases without description body, so both are empty/null.
+  const desc = phaseBead.description ?? '';
+  // Goal: line-based match (e.g. "Goal: Read-side detection...")
+  const goalMatch = desc.match(/^Goal:\s*(.+)$/m);
+  const goal = goalMatch ? goalMatch[1].trim() : null;
+
+  // Success Criteria: capture bulleted/numbered list after "Success Criteria:" heading
+  const success_criteria = [];
+  const scMatch = desc.match(/^Success Criteria:?\s*\n([\s\S]*?)(?:\n\s*\n|\n#|$)/m);
+  if (scMatch) {
+    for (const line of scMatch[1].split('\n')) {
+      const itemMatch = line.match(/^\s*(?:[-*]|\d+[.)])\s*(.+)$/);
+      if (itemMatch) success_criteria.push(itemMatch[1].trim());
+    }
+  }
+
+  // SC #3 cross-handler parity: phase_name MUST match analyze's `name` field byte-for-byte.
+  // analyze uses `bead.title ?? ''` without stripping; get-phase mirrors this exactly.
+  // KEY REMAP: analyze→`name`, get-phase→`phase_name`; VALUES must be equal.
+  const phase_number = parsePhaseId(phaseBead.labels.find(l => l.startsWith('phase-id:')));
+  const phase_name = phaseBead.title ?? '';
+
+  // Synthesize section as markdown (bd is source of truth — do NOT read .planning/ROADMAP.md).
+  // Format: "### Phase <N>: <name>\n\n<description>"
+  const section = `### Phase ${phase_number}: ${phase_name}\n\n${desc}`.trimEnd();
+
+  return {
+    data: {
+      found: true,
+      phase_number,
+      phase_name,
+      goal,
+      success_criteria,
+      section,
+      backend: 'beads',
+    },
+  };
+}
+
 // ─── BEADS_READ_OVERRIDES table ────────────────────────────────────────────
 // Phase 5+: real read handlers. Registered WITHOUT wrapMutation —
 // reads do NOT emit GSDEvent.StateMutation (D-09 forward-compat).
 export const BEADS_READ_OVERRIDES = {
   'roadmap.analyze': beadsRoadmapAnalyze,
+  'roadmap.get-phase': beadsRoadmapGetPhase,
 };
 
 // isKnownBdCliError — D-12: bd-CLI failures (binary missing, ENOENT) fall through to upstream
