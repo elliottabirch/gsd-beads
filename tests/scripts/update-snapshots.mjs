@@ -58,12 +58,15 @@ if (actual !== expected) {
 // No .planning/phases/ directory is created, so all phases have disk_status
 // 'no_directory' from upstream's perspective (which is fine — parity test only
 // checks key shapes, not values).
-
-function buildSyntheticRoadmapMd() {
-  // Mirrors v0.2 phases from seed.jsonl (phases 3-9 of v0.2 milestone).
-  // Format: upstream phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi
-  // Upstream milestonePattern = /##\s*(.*v(\d+(?:\.\d+)+)[^(\n]*)/gi
-  return `# Roadmap
+//
+// SYNTHETIC_FIXTURE: shared by both roadmap.analyze and roadmap.get-phase entries
+// to avoid duplicating the ROADMAP.md content and phaseDirs literals.
+const SYNTHETIC_FIXTURE = {
+  buildRoadmapMd() {
+    // Mirrors v0.2 phases from seed.jsonl (phases 3-9 of v0.2 milestone).
+    // Format: upstream phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi
+    // Upstream milestonePattern = /##\s*(.*v(\d+(?:\.\d+)+)[^(\n]*)/gi
+    return `# Roadmap
 
 ## Milestone v0.1 — Foundation
 
@@ -128,11 +131,10 @@ Extend the gsd-sdk shadow with read-side handlers.
 **Goal:** Query optimizer for bd export calls.
 
 `;
-}
-
-function buildSyntheticStateMd() {
-  // Minimal STATE.md with milestone: v0.2 so extractCurrentMilestone slices correctly.
-  return `---
+  },
+  buildStateMd() {
+    // Minimal STATE.md with milestone: v0.2 so extractCurrentMilestone slices correctly.
+    return `---
 milestone: v0.2
 ---
 
@@ -140,10 +142,11 @@ milestone: v0.2
 
 **Current Milestone:** v0.2
 `;
-}
+  },
+};
 
-// Runs upstream roadmap.analyze against a synthetic fixture and returns stdout.
-function captureRoadmapAnalyze() {
+// Build a seeded synthetic fixture in a tempdir, run a callback with the dir, then clean up.
+function withSyntheticFixture(callback) {
   const dir = mkdtempSync(join(tmpdir(), 'gsd-snapshot-'));
   try {
     // Seed bd state from seed.jsonl.
@@ -152,20 +155,38 @@ function captureRoadmapAnalyze() {
 
     // Write synthetic .planning/ROADMAP.md and STATE.md.
     mkdirSync(join(dir, '.planning'), { recursive: true });
-    writeFileSync(join(dir, '.planning', 'ROADMAP.md'), buildSyntheticRoadmapMd());
-    writeFileSync(join(dir, '.planning', 'STATE.md'), buildSyntheticStateMd());
+    writeFileSync(join(dir, '.planning', 'ROADMAP.md'), SYNTHETIC_FIXTURE.buildRoadmapMd());
+    writeFileSync(join(dir, '.planning', 'STATE.md'), SYNTHETIC_FIXTURE.buildStateMd());
 
-    // Run upstream gsd-sdk query roadmap.analyze against the synthetic fixture.
+    return callback(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// Runs upstream roadmap.analyze against a synthetic fixture and returns parsed data.
+function captureRoadmapAnalyze() {
+  return withSyntheticFixture((dir) => {
     const result = spawnSync('node', [UPSTREAM_BIN, 'query', 'roadmap.analyze', '--project-dir', dir], {
       encoding: 'utf-8',
       env: { ...process.env, GSD_MILESTONE: 'v0.2' },
     });
     if (result.status !== 0) throw new Error(`upstream roadmap.analyze failed: ${result.stderr}`);
-    const parsed = JSON.parse(result.stdout);
-    return parsed;
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+    return JSON.parse(result.stdout);
+  });
+}
+
+// Runs upstream roadmap.get-phase 5 against a synthetic fixture and returns parsed data.
+// Phase 5 is "progress reads" in the v0.2 milestone synthetic ROADMAP.md.
+function captureRoadmapGetPhase() {
+  return withSyntheticFixture((dir) => {
+    const result = spawnSync('node', [UPSTREAM_BIN, 'query', 'roadmap.get-phase', '5', '--project-dir', dir], {
+      encoding: 'utf-8',
+      env: { ...process.env, GSD_MILESTONE: 'v0.2' },
+    });
+    if (result.status !== 0) throw new Error(`upstream roadmap.get-phase failed: ${result.stderr}`);
+    return JSON.parse(result.stdout);
+  });
 }
 
 // ─── Snapshot table (Phase 5+ extends this) ────────────────────────────────
@@ -184,7 +205,15 @@ const SNAPSHOTS = [
     out: join(SNAPSHOT_DIR, 'roadmap-analyze.json'),
     // Phase 5: synthetic-fixture capture (Q2 Option B).
     // Upstream runs against .beads/ (from seed.jsonl) + synthetic ROADMAP.md.
+    // SYNTHETIC_FIXTURE shared with roadmap.get-phase entry below.
     capture: captureRoadmapAnalyze,
+  },
+  {
+    cmd: 'roadmap.get-phase',
+    out: join(SNAPSHOT_DIR, 'roadmap-get-phase.json'),
+    // Phase 5 Plan 04: capture upstream shape for phase 5 ("progress reads" in v0.2 milestone).
+    // SYNTHETIC_FIXTURE reused — same tempdir pattern as roadmap.analyze above.
+    capture: captureRoadmapGetPhase,
   },
 ];
 
