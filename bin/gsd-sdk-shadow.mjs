@@ -280,6 +280,88 @@ export function findBeadsRoot(start) {
   }
 }
 
+// ─── Phase 5 read-handler shared helpers ───────────────────────────────────
+// D-02 / D-07 / D-10..D-12 / D-15..D-17. Used by beadsRoadmapAnalyze and
+// beadsRoadmapGetPhase (Plans 03/04). Exported so tests cover them directly.
+
+/**
+ * D-02: Strip "phase-id:" prefix and zero-padding; preserve decimal segments.
+ * @param {string|null|undefined} label - e.g. "phase-id:05" or "phase-id:72.1"
+ * @returns {string|null} - e.g. "5" or "72.1" or null
+ */
+export function parsePhaseId(label) {
+  if (!label) return null;
+  return label.replace(/^phase-id:/, '').replace(/^0+(\d)/, '$1');
+}
+
+/**
+ * D-07: 7-value disk_status enum priority chain.
+ * planCount/summaryCount come from bd (D-06); hasContext/hasResearch from disk.
+ * Priority: no_directory → complete → partial → planned → researched → discussed → empty.
+ * @param {{planCount:number, summaryCount:number, hasContext:boolean, hasResearch:boolean, dirExists:boolean}} opts
+ * @returns {'complete'|'partial'|'planned'|'researched'|'discussed'|'empty'|'no_directory'}
+ */
+export function deriveDiskStatus({ planCount, summaryCount, hasContext, hasResearch, dirExists }) {
+  if (!dirExists) return 'no_directory';
+  if (planCount > 0 && summaryCount >= planCount) return 'complete';
+  if (summaryCount > 0) return 'partial';
+  if (planCount > 0) return 'planned';
+  if (hasResearch) return 'researched';
+  if (hasContext) return 'discussed';
+  return 'empty';
+}
+
+/**
+ * D-09/D-10 + refined D-06: Drift kinds — plan_count, summary_count, closed_without_summary.
+ * Aggregate kind `completed_phases_mismatch` is computed at handler-level (post-loop), not here.
+ *
+ * Per refined D-06 (commit 7feccb8): summary_count is LIVE — bd's "summarized plan count"
+ * (closed gsd:plan children) is compared against disk *-SUMMARY.md count. The handler
+ * MUST pass distinct bd_summary_count and disk_summary_count values for this comparison
+ * to be meaningful (do NOT pass the same value for both).
+ *
+ * Emits stderr line per drift case (D-09 channel 1) and returns array (channel 2).
+ *
+ * @param {string} phase - phase number (e.g. "5")
+ * @param {{plan_count:number, summary_count:number, bd_status:string}} bdState - bd-derived counts (summary_count = closed gsd:plan child count)
+ * @param {{disk_plan_count:number, disk_summary_count:number}} diskState - filesystem-derived counts
+ * @returns {{phase:string, kind:string, bd_value:number|string, disk_value:number}[]}
+ */
+export function detectDrift(phase, bdState, diskState) {
+  const entries = [];
+  if (bdState.plan_count !== diskState.disk_plan_count) {
+    console.error(`[gsd-shadow] DRIFT: phase ${phase} plan_count bd=${bdState.plan_count} disk=${diskState.disk_plan_count}`);
+    entries.push({ phase, kind: 'plan_count', bd_value: bdState.plan_count, disk_value: diskState.disk_plan_count });
+  }
+  if (bdState.summary_count !== diskState.disk_summary_count) {
+    console.error(`[gsd-shadow] DRIFT: phase ${phase} summary_count bd=${bdState.summary_count} disk=${diskState.disk_summary_count}`);
+    entries.push({ phase, kind: 'summary_count', bd_value: bdState.summary_count, disk_value: diskState.disk_summary_count });
+  }
+  if (bdState.bd_status === 'closed' && diskState.disk_summary_count === 0) {
+    console.error(`[gsd-shadow] DRIFT: phase ${phase} closed_without_summary`);
+    entries.push({ phase, kind: 'closed_without_summary', bd_value: 'closed', disk_value: 0 });
+  }
+  return entries;
+}
+
+/**
+ * D-15..D-17: Format milestone heading from bd memory or fall back to bare version.
+ * Heading format mirrors upstream's milestonePattern capture: "Milestone <version> — <heading>".
+ * Logs a stderr note exactly once per call when the memory is absent (D-17).
+ * @param {Record<string,string>} memories - kv object from `bd memories --json`
+ * @param {string} version - milestone version string (e.g. "v0.2")
+ * @returns {string} - formatted heading or bare version string
+ */
+export function loadMilestoneHeading(memories, version) {
+  const key = `gsd-beads:milestone:${version}:heading`;
+  const heading = memories?.[key];
+  if (heading) {
+    return `Milestone ${version} — ${heading}`;
+  }
+  console.error(`[gsd-shadow] note: no milestone heading memory for ${version}`);
+  return version;
+}
+
 // ─── BEADS_READ_OVERRIDES table ────────────────────────────────────────────
 // Phase 4: empty by default. Test stub registers ONLY when GSD_SHADOW_TEST_STUB=1.
 // Phases 5–9 add real read handlers. Registered WITHOUT wrapMutation —
