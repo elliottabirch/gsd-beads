@@ -22,6 +22,12 @@ key_decisions:
   - "v0.3 deliberately omits the milestone-heading memory to test the fallback path (D-17). v0.1 and v0.2 memories are seeded."
   - "Plan 01 supplies the phase-id:NN labels + 11-phase / 24-plan fixture that REQ-READ-01 SC #2 validates against (`total_plans == bd count -l gsd:plan` parity needs the substrate)."
 
+  Decision References:
+  - D-01: `phase-id:NN` label is the canonical phase identifier — stored zero-padded (phase-id:05); decimal via dot (phase-id:72.1); widen to 3-digit at 100+. This plan emits phase-id:01..11 on every phase epic.
+  - D-03: Phase 5 deliverable — edit tests/fixtures/build-seed.sh to emit phase-id:01..07 on the existing 7 phases and phase-id:08..11 on 4 new v0.2 phases; regenerate seed.jsonl.
+  - D-04: Future-skill flag — out of phase scope; documented for downstream awareness. /gsd-beads-add-phase skill must write phase-id:NN going forward; regen-roadmap.sh must preserve label discipline on round-trip. Skill-side update is deferred past Phase 5.
+  - D-18: build-seed.sh seeds milestone-heading memories via `BEADS_ACTOR=seed bd remember 'gsd-beads:milestone:v0.1:heading' 'Foundation'` (and v0.2); v0.3 deliberately omitted to exercise the D-17 fallback path. Task 2 of this plan implements these `bd remember` calls.
+
 must_haves:
   truths:
     - "build-seed.sh emits phase-id:NN labels (01..11) on every phase epic via BEADS_ACTOR=seed"
