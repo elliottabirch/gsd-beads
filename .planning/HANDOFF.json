@@ -1,0 +1,122 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-04-30T16:22:58.326Z",
+  "phase": "5",
+  "phase_name": "roadmap-read-handlers",
+  "phase_dir": ".planning/phases/05-roadmap-read-handlers",
+  "phase_status": "complete",
+  "phase_complete_tag": "phase-5-complete",
+  "next_thread": "spike-014-bd-blocks-sibling-deps",
+  "next_thread_path": ".planning/spikes/014-bd-blocks-sibling-deps",
+  "status": "paused_between_phase_5_and_phase_6",
+
+  "completed_in_session": [
+    {"plan": "discuss-phase 5", "commit": "0463d64", "result": "29 D-NN decisions locked"},
+    {"plan": "plan-phase 5", "commits": ["various"], "result": "5 plans across 5 waves; plan-checker iter 2 PASSED with 1 D-06 user refinement"},
+    {"plan": "05-01-fixture-migration", "commits": ["29d87ff", "732a9ac", "cfba53a"], "result": "11 phases + 24 plans + 2 milestone memories in seed"},
+    {"plan": "05-02-shared-helpers", "commits": ["852f68a", "a3987bb", "e13cc74"], "result": "4 helpers + parity helper extension"},
+    {"plan": "05-03-roadmap-analyze", "commits": ["a1d190a", "a8d9c6a", "20639ca", "f9993e8", "0693063"], "result": "beadsRoadmapAnalyze + 17 tests + bd-helper JSONL fix + parity-helper null-handling fix"},
+    {"plan": "05-04-roadmap-get-phase", "commits": ["cc124d7", "cc71b37", "72340ed", "3456b97"], "result": "beadsRoadmapGetPhase + 8 tests + cross-handler parity"},
+    {"plan": "05-05-quality-gates", "commits": ["ab9f6ad", "e2f0100", "9d1eaaf"], "result": "determinism + call-count precursors"},
+    {"plan": "verification", "commit": "59f2a69", "result": "5/5 PASSED with 1 override (SC #4 TDD temporal order for analyze handler)"}
+  ],
+
+  "open_gaps": [
+    {
+      "id": "GAP-01",
+      "field": "depends_on",
+      "summary": "roadmap.analyze emits null always; v0.1 regen-roadmap.sh:178-180 hardcoded `(none)` placeholder; never validated which bd relation type encodes sibling-ordering deps",
+      "blocks": "Plan 5.6 value-extraction; impacts /gsd-progress depends-on rendering; impacts bd ready (REQ-08) accuracy",
+      "decision_needed": "How to model 'Phase 5 depends on Phase 4' in bd graph",
+      "candidate_options": [
+        "(a) bd dep add (default blocks type) — natural for bd ready; spike 014 validates",
+        "(b) custom --type depends-on edge — disambiguates from blocks runtime semantics",
+        "(c) label-based depends:phase-N",
+        "(d) description-text Depends on: parsing — explicitly rejected by user (string parsing)",
+        "(e) don't model — emit null; loses bd ready (REQ-08) functionality"
+      ],
+      "next_step": "Run spike 014 to validate option (a)"
+    },
+    {
+      "id": "GAP-02",
+      "field": "name",
+      "summary": "roadmap.analyze emits raw bead title (e.g. 'v0.2 Phase B: roadmap reads'); upstream regex extracts the part after 'Phase N:' (e.g. 'roadmap reads')",
+      "blocks": "byte-level value parity with upstream; visible in /gsd-progress phase panel",
+      "fix": "extractPhaseName() helper mirroring upstream regex /Phase\\s+\\d+[A-Z]?(?:\\.\\d+)*\\s*:\\s*(.+)$/",
+      "next_step": "Plan 5.6 Task 2"
+    },
+    {
+      "id": "GAP-03",
+      "field": "goal",
+      "summary": "roadmap.analyze emits null; bd description not parsed. roadmap.get-phase already extracts via /^Goal:\\s*(.+)$/m regex (Plan 04 working).",
+      "blocks": "byte-level value parity; visible in /gsd-progress phase panel as no goal text",
+      "fix": "extractGoal() helper reusing Plan 04 regex; mirror in roadmap.analyze",
+      "next_step": "Plan 5.6 Task 3 — also requires build-seed.sh to add Goal: lines to bead descriptions"
+    },
+    {
+      "id": "GAP-04",
+      "field": "success_criteria",
+      "summary": "roadmap.get-phase parses Spike 007 multi-line bullet format from description. roadmap.analyze does NOT have this field. Status: emit [] when bd description lacks the section.",
+      "blocks": "deferred — only get-phase needs it; current implementation uses regex (string parsing the user wants to avoid)",
+      "next_step": "Defer or convert to memory-key approach (gsd-beads:phase:N:success-criteria) in v0.3"
+    },
+    {
+      "id": "GAP-05",
+      "field": "decision-coverage gate",
+      "summary": "gsd-sdk query check.decision-coverage-plan reports 14/29 covered even though all 15 missing D-NN citations exist as literal tokens in plan files (verified via grep). Structural gate matcher has tighter scoping than free-text body match.",
+      "blocks": "verification override required for decision coverage; future phases inherit",
+      "next_step": "File upstream gsd-sdk-cc issue OR document workaround (planner adds Decision References subsection in key_decisions block)"
+    },
+    {
+      "id": "GAP-06",
+      "field": "phantom bd-sync clobber",
+      "summary": "During long agent work, bd-sync.sh PostToolUse hook fires and regen-roadmap.sh + regen-requirements.sh run against the empty bd store, wiping ROADMAP.md and REQUIREMENTS.md to placeholder regen output. STATE.md and seed.jsonl also affected.",
+      "occurrences_this_session": 2,
+      "workaround": "git checkout HEAD -- .planning/ROADMAP.md .planning/REQUIREMENTS.md .planning/STATE.md tests/fixtures/seed.jsonl",
+      "blocks": "session continuity; agent must check git status before commits",
+      "next_step": "documented in feedback_hook_workarounds.md; root fix is /gsd-beads disambiguate-bd-managed-detection todo (out of v0.2 scope)"
+    }
+  ],
+
+  "blockers": [
+    {
+      "id": "BLOCKER-01",
+      "description": "depends_on architectural decision: blocks vs custom edge type vs other (GAP-01)",
+      "type": "technical",
+      "workaround": "Spike 014 will validate option (a) — bd dep add with default blocks type"
+    }
+  ],
+
+  "human_actions_pending": [
+    {
+      "action": "Run spike 014: bd-blocks-sibling-deps validation",
+      "context": "Before writing Plan 5.6, validate that bd dep add (blocks type) actually works for sibling phase ordering — does bd ready respect it; does cascade-loop interfere; does export emit it cleanly",
+      "blocking": true
+    },
+    {
+      "action": "Decide spike 014 outcome → which option to lock for depends_on (GAP-01)",
+      "context": "If blocks works cleanly, lock option (a). If runtime semantics interfere, fall back to option (b) custom edge type or (c) label-based.",
+      "blocking": true
+    }
+  ],
+
+  "decisions_this_session": [
+    {"decision": "D-06 refined: summary_count from closed gsd:plan children", "rationale": "gsd:summary label doesn't exist in production; user locked bd-as-source-of-truth principle from discuss-phase", "commit": "7feccb8"},
+    {"decision": "summary_count drift kind stays LIVE (refined D-06)", "rationale": "Compares closed-plan count vs disk *-SUMMARY.md count; alerts on real divergence", "commit": "various Plan 03"},
+    {"decision": "SC #4 TDD temporal order override accepted for analyze handler", "rationale": "Working-tree drift recovered at a1d190a; functional parity test exists and passes; CI catches future drift", "commit": "59f2a69"},
+    {"decision": "Plan packaging: spike before Plan 5.6", "rationale": "User flagged my Plan 5.6 spec leaned on 'blocks' without validating; spike 014 first to determine valid path forward"}
+  ],
+
+  "uncommitted_files": [],
+
+  "git_state": {
+    "branch": "main",
+    "head": "59f2a69",
+    "tags": ["phase-5-wave-2-complete (e13cc74)", "phase-5-complete (59f2a69)"],
+    "clean": true
+  },
+
+  "next_action": "cd .planning/spikes/014-bd-blocks-sibling-deps && cat .continue-here.md — read the spike charter, then create SPIKE.md and run the validation. Spike's output determines GAP-01 resolution.",
+
+  "context_notes": "User caught that my Plan 5.6 draft leaned on bd's `blocks` edge type for sibling-ordering deps without validating that decision. Spike findings ban blocks for HIERARCHY (parent-child cascades) but don't explicitly extend to sibling ordering — and v0.1 regen-roadmap.sh:178-180 deferred the dep graph implementation entirely (`(none)` placeholder). User wants spike 014 to validate option (a) before Plan 5.6. After spike, write Plan 5.6 (gap-closure for analyze field extraction), then Phase 6 (progress.* read handlers) can begin."
+}
