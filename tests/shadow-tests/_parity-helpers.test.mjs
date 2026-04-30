@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assertKeySetParity, assertTypeParity } from './_parity-helpers.mjs';
+import { assertKeySetParity, assertTypeParity, assertKeySetParityWithExt } from './_parity-helpers.mjs';
 
 // CASE 1: assertKeySetParity — missing key throws with path containing the missing key name
 test('CASE 1: assertKeySetParity — missing key throws with path', () => {
@@ -64,5 +64,23 @@ test('CASE 6: assertKeySetParity — nested missing key surfaces dotted path', (
       { phases: [{ id: 'p1', disk_status: 'open' }] },
     ),
     /\.phases\[0\].*missing keys:.*disk_status/,
+  );
+});
+
+// CASE 7: assertKeySetParityWithExt allows whitelisted bd-only keys (drift, backend)
+test('CASE 7: assertKeySetParityWithExt allows whitelisted bd-only keys (drift)', () => {
+  const snapshot = { phases: [], phase_count: 0 };
+  const actual = { phases: [], phase_count: 0, drift: [], backend: 'beads' };
+  // Should NOT throw — both `drift` and `backend` are extensions
+  assert.doesNotThrow(() => assertKeySetParityWithExt(actual, snapshot, ['drift', 'backend']));
+});
+
+// CASE 8: assertKeySetParityWithExt still catches non-whitelisted missing keys
+test('CASE 8: assertKeySetParityWithExt still catches non-whitelisted missing keys', () => {
+  const snapshot = { phases: [], phase_count: 0, milestones: [] };
+  const actual = { phases: [], phase_count: 0, drift: [] }; // missing milestones (NOT an extension)
+  assert.throws(
+    () => assertKeySetParityWithExt(actual, snapshot, ['drift']),
+    /missing keys.*milestones/,
   );
 });
