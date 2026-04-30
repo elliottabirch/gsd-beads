@@ -25,6 +25,7 @@
     {
       "id": "GAP-01",
       "field": "depends_on",
+      "status": "RESOLVED",
       "summary": "roadmap.analyze emits null always; v0.1 regen-roadmap.sh:178-180 hardcoded `(none)` placeholder; never validated which bd relation type encodes sibling-ordering deps",
       "blocks": "Plan 5.6 value-extraction; impacts /gsd-progress depends-on rendering; impacts bd ready (REQ-08) accuracy",
       "decision_needed": "How to model 'Phase 5 depends on Phase 4' in bd graph",
@@ -35,7 +36,16 @@
         "(d) description-text Depends on: parsing — explicitly rejected by user (string parsing)",
         "(e) don't model — emit null; loses bd ready (REQ-08) functionality"
       ],
-      "next_step": "Run spike 014 to validate option (a)"
+      "decision": "Option (a) — bd dep add (default blocks type). Spike 014 returned 7/7 PASS on bd v1.0.3.",
+      "evidence": ".planning/spikes/014-bd-blocks-sibling-deps/SPIKE.md",
+      "key_findings": [
+        "bd export --json surfaces blocks edges in dependencies[] with field name 'type' (NOT 'dependency_type')",
+        "Direction: bead.dependencies[].depends_on_id is the BLOCKER",
+        "Cascade-loop walks parent-child only; blocks edges are inert (Q3 confirmed)",
+        "JSONL roundtrip preserves blocks edges byte-identically (Q4/Q5 confirmed)",
+        "Multi-blocker semantics: A blocked by B+C requires both closed before A is ready"
+      ],
+      "next_step": "Plan 5.6 — extend build-seed.sh with bd dep add calls; wire dependsOn extraction into beadsRoadmapAnalyze using `dependencies[].filter(d => d.type === 'blocks').map(d => d.depends_on_id)`; re-capture parity snapshots."
     },
     {
       "id": "GAP-02",

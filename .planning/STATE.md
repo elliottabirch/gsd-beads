@@ -1,62 +1,140 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.2
-milestone_name: Beads-backed reads
-status: verifying
-last_updated: "2026-04-30T04:27:06.559Z"
+milestone: v1.0
+milestone_name: BeadsAdapter implementation (post-fork)
+status: scoping
+last_updated: "2026-04-30T00:00:00.000Z"
 last_activity: 2026-04-30
 progress:
-  total_phases: 8
-  completed_phases: 2
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+superseded_milestones:
+  - id: v0.1
+    name: Foundation
+    status: complete
+    note: Spike + initial layer + cross-worktree validation. Carries forward.
+  - id: v0.2
+    name: Beads-backed reads
+    status: superseded
+    note: Phase 5/8 complete; remaining 3 phases canceled when shadow approach was abandoned in favor of fork-based adapter interface (2026-04-30). Phase 4-5 work carries forward as input to v1.0 Phase 6 (BeadsAdapter implementation).
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 05 (roadmap-read-handlers) — COMPLETE
-Plan: 5 of 5
-Status: Phase complete — all 5 plans shipped, 131 tests passing; ready for /gsd-verify-work
+Milestone: v1.0 (BeadsAdapter implementation against forked GSD)
+Status: scoping — pending GitHub fork creation
 Last activity: 2026-04-30
 
-## Reference
+## Architectural pivot (2026-04-30)
 
-- **Project core value:** Integrate beads as source of truth for GSD workflow state without modifying GSD upstream.
-- **Current milestone:** v0.2 (Beads-backed reads) — extend the `gsd-sdk` shadow with read-side handlers so `/gsd-progress`, `/gsd-resume-work`, `/gsd-execute-phase`, and the rest of the GSD command surface route off bd-derived state.
-- **Phases this milestone:** 4 (findBeadsRoot + parity infra) → 5 (roadmap.*) → 6 (progress.*) → 7 (state.*) → 8 (phase lookup) → 9 (init.*) → 10 (mutation hook audit, parallel, blocks ship) → 11 (transitive verification + QUAL gates).
-- **v0.1 phases (completed):** 1 (spike), 2 (build the layer), 3 (cross-worktree validation).
+The v0.2 shadow architecture was abandoned after the fork-investigation
+research found it had a hard ceiling:
 
-## Accumulated Context
+- ~334 enumerated direct-I/O leaks across upstream GSD bypass the SDK
+  surface entirely (workflows, agents, fat skills using Read/Write/Edit
+  tools directly)
+- A new leak class (`<context>`-block frontmatter `@.planning/...`)
+  loads files at skill-activation time, before any shadow can intercept
+- Every `/gsd-update` overwrites shadow installations
+- Maintaining handlers in sync with upstream was open-ended
 
-### Key decisions (locked in by research)
+**Decision:** fork upstream `gsd-build/get-shit-done`, add a
+`StorageAdapter` interface (zero behavior change without an adapter),
+and rebuild gsd-beads as a `BeadsAdapter` implementation against that
+interface.
 
-- Use a NEW table `BEADS_READ_OVERRIDES` — do NOT extend `BEADS_OVERRIDES`. Reads register without `wrapMutation` (mutation-shaped events would be semantically wrong for reads).
-- Per-handler parity snapshot test BEFORE handler implementation (red → green) is non-negotiable per REQ-QUAL-01.
-- Read handlers MUST stay within the `bd-sync.sh` allowlist (`list, show, ready, memories, status, prime, export, deps, children, search, help, version`) — CI grep test enforces this.
-- `findBeadsRoot()` replaces `isBeadsManaged()` for reads (worktree topology, symmetric with hooks fix `b51abbc`); `isBeadsManaged()` keeps its mutation semantics intact.
-- Phase 4 is foundation for Phases 5–9; Phase 5 lands first because Phase 6 shares its parsing primitives; Phases 6–9 are roughly parallelisable.
-- Phase 10 (mutation audit) is parallelisable with read handler work but BLOCKS SHIP.
-- v0.2 ships when Phase 11 cross-cutting invariants are green AND Phase 10 audit is resolved.
+See `.planning/DECISIONS.md` for the locked decisions.
+See `.planning/research/fork-investigation/SYNTHESIS.md` for the
+investigation that motivated this pivot (~258 artifacts classified, ~96
+adapter methods proposed, 6 foundational primitives identified).
 
-### Blockers
+## v1.0 milestone scope (synthesis-derived)
 
-None (roadmap drafted, plan-phase for Phase 4 is the next action).
+8 phases (per `.planning/research/fork-investigation/SYNTHESIS.md` §7):
 
-### Pending todos
+| # | Phase | Repo |
+|---|-------|------|
+| 1 | Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | fork |
+| 2 | Wire core read methods to adapter | fork |
+| 3 | Wire core write methods + `recordStateEvent` | fork |
+| 4 | Plug workflow leaks (top 10 + the `<context>`-block class) | fork |
+| 5 | Foundational primitive lift (`updateSection`, `snapshot/restore`, `putNamedDoc`, `writeBinaryAsset`) | fork |
+| 6 | **BeadsAdapter implementation** | gsd-beads (this repo) |
+| 7 | Conformance test suite (run against both adapters) | both |
+| 8 | Migration + distribution | both |
 
-- `disambiguate-bd-managed-detection.md` (out of v0.2 scope; tracked in `.planning/todos/pending/`).
+Phases 1–5 are upstream-fork-side work; gsd-beads (this repo) goes dormant
+until Phase 6.
+
+## Locked decisions (2026-04-30)
+
+1. **Two-repo model** — `<user>/get-shit-done` (fork) + `gsd-beads`
+   (BeadsAdapter, this repo)
+2. **Fork name:** keep `get-shit-done` (no rename)
+3. **Upstream sync model:** periodic rebase against `gsd-build/get-shit-done`
+4. **Adapter capability negotiation:** `adapter.capabilities = { ... }` flag
+
+See `.planning/DECISIONS.md` for the full record + rationale.
+
+## Open architectural questions deferred to v1.0 milestone phases
+
+Six remaining open questions (see SYNTHESIS.md §6) are NOT blocking for
+Phase 1; they get answered as the relevant phases approach:
+
+- `commitPlanningState` semantics (Phase 3 blocker)
+- Section-scoped vs whole-file granularity (Phase 5 blocker)
+- 2 raw-git outliers — `spec-phase`/`eval-review` (Phase 4 cleanup)
+- `<context>`-block leak mitigation strategy (Phase 4)
+- Sidecar paths kv-vs-named (Phase 5)
+- Knowledge-graph subsystem scope (Phase 5/6 boundary)
+- "Scratch" record taxonomy (Phase 5)
+- Markdown-and-lockfile helpers visibility (Phase 1 design call)
+- Init-bundle granularity (Phase 2)
+
+## Carry-forward from v0.1 / v0.2
+
+The shadow-architecture code in `bin/gsd-sdk-shadow.mjs` and the hook
+scripts are preserved in this repo as historical reference. They get
+archived (not deleted) during Phase 6 when the BeadsAdapter takes over.
+
+What translates DIRECTLY into Phase 6 (see PROJECT.md "Carry-forward"
+section for the full list):
+
+- 13 spike findings (Spike 002/003/005/007/014 especially)
+- Bead vocabulary conventions (labels, IDs, hierarchy)
+- Helpers: `parsePhaseId`, `deriveDiskStatus`, `detectDrift`,
+  `loadMilestoneHeading`, `findBeadsRoot`
+- Test infrastructure (seed.jsonl, build-seed.sh, seed-fixture.sh,
+  parity helpers)
+- Format-module concept (bidirectional parse/format pair)
+- Determinism contract (`bd init --from-jsonl` byte-identity)
+- Memory-key patterns (with documented forget-sync caveat)
+
+## Pending todos
+
+- `disambiguate-bd-managed-detection.md` — out of v0.2 scope when filed;
+  v1.0 Phase 6 BeadsAdapter `init()` step covers this naturally
 
 ## Session Continuity
 
-Phase 5 complete 2026-04-30. 5 plans executed across 5 waves:
-- 05-01: seed.jsonl migration (11 phases + 24 plans + milestone memories)
-- 05-02: shared helpers (4 helpers + assertKeySetParityWithExt)
-- 05-03: roadmap.analyze handler (REQ-READ-01)
-- 05-04: roadmap.get-phase handler (REQ-READ-02 + SC #3 cross-handler parity)
-- 05-05: quality gates (determinism + call-count precursors; REQ-QUAL-06/07)
+Architectural pivot session 2026-04-30:
+- Fork-investigation: 10 batch agents classified ~258 artifacts in
+  parallel (~3-4 hours wall clock)
+- Synthesis: SYNTHESIS.md (6515 words, comprehensive adapter draft)
+- 4 pre-flight decisions locked (DECISIONS.md)
+- PROJECT.md rewritten around adapter-interface model
+- v0.2 milestone superseded; v1.0 scoping
+- Next: user forks `gsd-build/get-shit-done` to `<user>/get-shit-done`,
+  clones locally; new milestone-scoping conversation in the new repo
 
-Total: 131 mjs tests passing (128 baseline + 3 call-count). All 7 test runners green.
-Next action: `/gsd-verify-work` — Phase 5 ready for verification.
+Once the fork repo exists, the next concrete actions are:
+1. Bootstrap `.planning/` in the fork repo (or use a different planning
+   strategy native to the fork)
+2. `/gsd-new-milestone` declaring v1.0 with the 8-phase scope above
+3. `/gsd-discuss-phase 1` for the fork bootstrap + adapter interface
+   skeleton + MarkdownAdapter scaffold
