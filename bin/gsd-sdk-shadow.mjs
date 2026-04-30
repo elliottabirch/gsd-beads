@@ -2,12 +2,12 @@
 // Y1 (shadow gsd-sdk) — registry-override variant.
 // GSD core unmodified per REQ-02; uses dynamic import of upstream's dist/.
 // D-02 invariant: 13 mutation entries (BEADS_OVERRIDES) live here.
-//                 Reads (BEADS_READ_OVERRIDES) register separately; empty in Phase 4
-//                 (test stub registers only when GSD_SHADOW_TEST_STUB=1).
+//                 Reads (BEADS_READ_OVERRIDES) register separately; roadmap.analyze
+//                 is the first real read handler (Phase 5).
 // D-09 / W3 invariant: production eventStream=null → wrapMutation is a no-op (MVP).
 
 import { spawnSync, execSync } from 'node:child_process';
-import { existsSync, realpathSync, statSync, readFileSync } from 'node:fs';
+import { existsSync, realpathSync, statSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { wrapMutation } from './wrap-mutation.mjs';
@@ -18,6 +18,7 @@ import {
   BeadsVersionMismatch,
   BeadsEmpty,
 } from './beads-errors.mjs';
+import { bd } from './bd-helper.mjs';
 
 const DEBUG = process.env.GSD_BEADS_DEBUG === '1';
 const log = (...a) => { if (DEBUG) console.error('[gsd-sdk-shadow]', ...a); };
@@ -362,24 +363,229 @@ export function loadMilestoneHeading(memories, version) {
   return version;
 }
 
-// ─── BEADS_READ_OVERRIDES table ────────────────────────────────────────────
-// Phase 4: empty by default. Test stub registers ONLY when GSD_SHADOW_TEST_STUB=1.
-// Phases 5–9 add real read handlers. Registered WITHOUT wrapMutation —
-// reads do NOT emit GSDEvent.StateMutation (D-09 forward-compat).
-export const BEADS_READ_OVERRIDES = {};
+// ─── readGitConfigMilestone ─────────────────────────────────────────────────
+// D-19: read current milestone from worktree-local git config, then GSD_MILESTONE
+// env override, then fallback to "v0.2". Used by beadsRoadmapAnalyze.
+function readGitConfigMilestone(projectDir) {
+  const result = spawnSync('git', ['config', '--worktree', 'gsd-beads.milestone'], {
+    cwd: projectDir,
+    encoding: 'utf-8',
+  });
+  if (result.status === 0 && result.stdout.trim()) return result.stdout.trim();
+  if (process.env.GSD_MILESTONE) return process.env.GSD_MILESTONE;
+  return 'v0.2';
+}
 
-// _phase4-test-stub: lifecycle-bound to Phase 4. Phase 5 deletes this block + the stub registration.
-if (process.env.GSD_SHADOW_TEST_STUB === '1') {
-  BEADS_READ_OVERRIDES['_phase4-test-stub'] = async function phase4TestStub(args, projectDir) {
-    const throwMode = process.env.GSD_SHADOW_TEST_STUB_THROW;
-    if (throwMode === 'not-installed')    throw new BeadsNotInstalled('test-stub: simulated bd missing');
-    if (throwMode === 'corrupt')          throw new BeadsCorrupt('test-stub: simulated metadata.json corruption');
-    if (throwMode === 'version-mismatch') throw new BeadsVersionMismatch('test-stub: simulated bd version out of range');
-    if (throwMode === 'empty')            throw new BeadsEmpty('test-stub: simulated empty .beads/');
-    if (throwMode === 'typeerror')        throw new TypeError('test-stub: real bug');
-    return { data: { ok: true, backend: 'beads' } };
+// ─── beadsRoadmapAnalyze ────────────────────────────────────────────────────
+// REQ-READ-01: first real bd-backed read handler.
+// D-22: registered in BEADS_READ_OVERRIDES without wrapMutation.
+// D-24: calls findBeadsRoot before any bd invocation.
+// D-25: handler is clean — does NOT catch BeadsUnavailableError.
+// D-27: single bd(['export','--json']) + single bd(['memories','--json']) per invocation.
+// D-28: sort by priority desc, created_at asc, id asc (deterministic).
+async function beadsRoadmapAnalyze(_args, projectDir) {
+  // D-24: find bd root or throw BeadsEmpty (dispatcher catches and falls through).
+  const root = findBeadsRoot(projectDir);
+  if (!root) throw new BeadsEmpty('roadmap.analyze: project is not bd-managed');
+
+  // D-27: SINGLE export call — no per-phase fan-out.
+  const allBeads = bd(['export', '--json'], { cwd: root });
+
+  // D-27: memories call — second of 2 allowed spawns.
+  const memories = bd(['memories', '--json'], { cwd: root });
+
+  // D-19: current milestone from worktree git config / env / fallback.
+  const currentMilestone = readGitConfigMilestone(projectDir);
+
+  // Filter phase epics for current milestone.
+  const phaseBeads = allBeads.filter(b =>
+    Array.isArray(b.labels) &&
+    b.labels.includes('gsd:phase') &&
+    b.labels.includes(`version:${currentMilestone}`)
+  );
+
+  // D-28: sort by priority desc, created_at asc, id asc.
+  phaseBeads.sort((a, b) =>
+    (b.priority - a.priority) ||
+    (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0) ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+
+  // Build parent→children index from allBeads dependency edges.
+  // Each child bead has a dependencies[] array; find parent-child edges.
+  const childrenByParent = {};  // parentId → [childBead, ...]
+  for (const bead of allBeads) {
+    if (!Array.isArray(bead.dependencies)) continue;
+    for (const dep of bead.dependencies) {
+      if (dep.type === 'parent-child' && dep.depends_on_id) {
+        const parentId = dep.depends_on_id;
+        if (!childrenByParent[parentId]) childrenByParent[parentId] = [];
+        childrenByParent[parentId].push(bead);
+      }
+    }
+  }
+
+  // Locate the .planning/phases dir for disk I/O.
+  const phasesDir = join(projectDir, '.planning', 'phases');
+  let phaseDirEntries = null;
+  try {
+    phaseDirEntries = readdirSync(phasesDir, { withFileTypes: true })
+      .filter(e => e.isDirectory())
+      .map(e => e.name);
+  } catch { /* phases dir absent — all phases will be no_directory */ }
+
+  // D-02: phase number helper (imported from module scope).
+  // Collect phases with scratch fields for drift detection.
+  const phasesWithScratch = [];
+  for (const bead of phaseBeads) {
+    const phaseIdLabel = bead.labels.find(l => l.startsWith('phase-id:'));
+    const phaseNum = parsePhaseId(phaseIdLabel);
+
+    // Disk I/O: find phase directory via upstream's phaseTokenMatches logic.
+    // We implement a simplified version: match dir name starting with the
+    // zero-padded phase number (e.g. "05-...").
+    let phaseFiles = null;
+    if (phaseDirEntries) {
+      const normalized = phaseNum ? phaseNum.padStart(2, '0') : null;
+      if (normalized) {
+        const dirMatch = phaseDirEntries.find(d => {
+          // Match: "05-name" or "5-name" or just "05"
+          const token = d.match(/^(\d+[A-Z]?(?:\.\d+)*)(?:-|$)/i)?.[1];
+          return token && token.padStart(2, '0') === normalized;
+        });
+        if (dirMatch) {
+          try {
+            phaseFiles = readdirSync(join(phasesDir, dirMatch));
+          } catch { /* ignore */ }
+        }
+      }
+    }
+
+    const planCount = (childrenByParent[bead.id] ?? [])
+      .filter(c => Array.isArray(c.labels) && c.labels.includes('gsd:plan')).length;
+
+    // D-06 refined: summary_count = count of CLOSED gsd:plan children.
+    const bdSummaryCount = (childrenByParent[bead.id] ?? [])
+      .filter(c => Array.isArray(c.labels) && c.labels.includes('gsd:plan') && c.status === 'closed').length;
+
+    const diskPlanCount = phaseFiles
+      ? phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').length
+      : 0;
+    const diskSummaryCount = phaseFiles
+      ? phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md').length
+      : 0;
+    const hasContext = phaseFiles
+      ? phaseFiles.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md')
+      : false;
+    const hasResearch = phaseFiles
+      ? phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md')
+      : false;
+
+    const diskStatus = deriveDiskStatus({
+      planCount,
+      summaryCount: bdSummaryCount,
+      hasContext,
+      hasResearch,
+      dirExists: phaseFiles !== null,
+    });
+
+    // Extract name and goal from bead title/description.
+    // Title format: "v0.2 Phase A: findBeadsRoot" → name = "v0.2 Phase A: findBeadsRoot"
+    // (upstream uses full heading text; we use title as-is per D-05 parity).
+    // Goal and depends_on are not stored in bd beads — emit null (D-06 disk-only fields).
+    phasesWithScratch.push({
+      number: phaseNum,
+      name: bead.title ?? '',
+      goal: null,
+      depends_on: null,
+      plan_count: planCount,
+      summary_count: bdSummaryCount,     // D-06 refined: bd source of truth
+      has_context: hasContext,
+      has_research: hasResearch,
+      disk_status: diskStatus,
+      roadmap_complete: bead.status === 'closed',
+      // Scratch fields for drift computation — stripped before emit.
+      _bdStatus: bead.status,
+      _bdSummaryCount: bdSummaryCount,
+      _diskSummaryCount: diskSummaryCount,
+      _diskPlanCount: diskPlanCount,
+    });
+  }
+
+  // D-21: current_phase = first planned or partial; next_phase = first empty/no_directory/discussed/researched.
+  const currentPhaseObj = phasesWithScratch.find(
+    p => p.disk_status === 'planned' || p.disk_status === 'partial'
+  ) ?? null;
+  const nextPhaseObj = phasesWithScratch.find(
+    p => p.disk_status === 'empty' || p.disk_status === 'no_directory' ||
+         p.disk_status === 'discussed' || p.disk_status === 'researched'
+  ) ?? null;
+  const currentPhase = currentPhaseObj ? currentPhaseObj.number : null;
+  const nextPhase = nextPhaseObj ? nextPhaseObj.number : null;
+
+  // D-15..D-17: milestones[] — one entry for current milestone.
+  const heading = loadMilestoneHeading(memories, currentMilestone);
+  const milestones = [{ heading, version: currentMilestone }];
+
+  // Aggregates.
+  const totalPlans = phasesWithScratch.reduce((s, p) => s + p.plan_count, 0);
+  const totalSummaries = phasesWithScratch.reduce((s, p) => s + p.summary_count, 0);
+  const completedPhases = phasesWithScratch.filter(p => p._bdStatus === 'closed').length;  // D-14
+  const progressPercent = totalPlans > 0
+    ? Math.min(100, Math.round((totalSummaries / totalPlans) * 100))
+    : 0;
+
+  // D-08..D-12: drift detection (channel 2 — array) + channel 1 (stderr per entry in detectDrift).
+  const driftEntries = [];
+  for (const p of phasesWithScratch) {
+    driftEntries.push(...detectDrift(
+      p.number,
+      { plan_count: p.plan_count, summary_count: p._bdSummaryCount, bd_status: p._bdStatus },
+      { disk_plan_count: p._diskPlanCount, disk_summary_count: p._diskSummaryCount }
+    ));
+  }
+  // Aggregate-level drift: completed_phases_mismatch.
+  const diskCompleted = phasesWithScratch.filter(p => p.disk_status === 'complete').length;
+  if (completedPhases !== diskCompleted) {
+    console.error(`[gsd-shadow] DRIFT: completed_phases bd=${completedPhases} disk=${diskCompleted}`);
+    driftEntries.push({
+      phase: '*',
+      kind: 'completed_phases_mismatch',
+      bd_value: completedPhases,
+      disk_value: diskCompleted,
+    });
+  }
+
+  // Strip scratch fields before emit.
+  const phases = phasesWithScratch.map(({
+    _bdStatus, _bdSummaryCount, _diskSummaryCount, _diskPlanCount,
+    ...rest
+  }) => rest);
+
+  return {
+    data: {
+      milestones,
+      phases,
+      phase_count: phases.length,
+      completed_phases: completedPhases,
+      total_plans: totalPlans,
+      total_summaries: totalSummaries,
+      progress_percent: progressPercent,
+      current_phase: currentPhase,
+      next_phase: nextPhase,
+      missing_phase_details: null,  // N/A for bd-backed (no checklist parsing)
+      backend: 'beads',
+      drift: driftEntries,
+    },
   };
 }
+
+// ─── BEADS_READ_OVERRIDES table ────────────────────────────────────────────
+// Phase 5+: real read handlers. Registered WITHOUT wrapMutation —
+// reads do NOT emit GSDEvent.StateMutation (D-09 forward-compat).
+export const BEADS_READ_OVERRIDES = {
+  'roadmap.analyze': beadsRoadmapAnalyze,
+};
 
 // isKnownBdCliError — D-12: bd-CLI failures (binary missing, ENOENT) fall through to upstream
 // alongside BeadsUnavailableError. Real bugs (TypeError etc.) keep v0.1 loud-fail behavior.
