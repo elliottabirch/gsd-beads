@@ -277,3 +277,150 @@ correct bd-derived state on a beads-managed fixture.
 | REQ-VERIFY-02 (transitive P1 verification) | Phase 11 | Pending |
 
 **Coverage:** 23/23 v0.2 requirements mapped to exactly one owning phase. REQ-QUAL-01 and REQ-QUAL-02 are owned by Phase 4 (where the harness/sentinel are built) but are referenced from each read-handler phase's success criteria as the parity-test-first invariant.
+
+**Status note (2026-04-30):** v0.2 milestone superseded by architectural pivot. Phases 4 and 5 shipped; Phases 6-11 canceled. REQ-READ-03..14, REQ-QUAL-04..07, REQ-VERIFY-01..02 are all **superseded** — their concerns reframe as v1.0 BeadsAdapter requirements (TBD when fork interface ships). REQ-READ-01..02 and REQ-QUAL-01..03 shipped in v0.2 and carry forward as v1.0 inputs.
+
+---
+
+# Milestone v0.3 Requirements — Adapter prep
+
+Single phase. Pure cleanup + scaffolding. No fork dependency.
+
+## Cleanup (archival of v0.2 shadow architecture)
+
+### CLEAN-01: v0.2 shadow source archived
+
+`bin/gsd-sdk-shadow.mjs` and `bin/wrap-mutation.mjs` move to
+`archive/v0.2-shadow/`. No active code remains under `bin/`. Files
+preserved as historical reference (not `git rm`).
+
+### CLEAN-02: Obsolete hooks archived
+
+`hooks/block-gsd-sdk-mutation.sh` and `hooks/block-state-md.sh` move to
+`archive/v0.2-shadow/hooks/`. `hooks/bd-sync.sh` moves to the same
+archive directory (its cascade-trigger logic carries forward as input
+to v1.0 but isn't currently active).
+
+### CLEAN-03: Obsolete regen scripts archived
+
+`scripts/regen-roadmap.sh` and `scripts/regen-requirements.sh` move to
+`archive/v0.2-shadow/scripts/`. The cascade-loop logic (`scripts/cascade-loop.sh`)
+stays — it remains useful as a bd primitive carry-forward.
+
+### CLEAN-04: Install script removed or repurposed
+
+`install.sh` is removed (this repo is no longer a system layer that
+installs hooks into `~/.claude/`). If a stub remains, it documents the
+new architecture (npm package, fork-link).
+
+## Architecture (src/ layout for adapter library)
+
+### ARCH-01: `src/bd/` module with bd CLI primitives
+
+`src/bd/helper.mjs`, `src/bd/errors.mjs`, `src/bd/findRoot.mjs` exist
+and export the v0.2 carry-forward primitives (`bd-helper.mjs`,
+`beads-errors.mjs`, `findBeadsRoot()` extracted from shadow). Logic
+unchanged — pure relocation + minor module-shape adjustment.
+
+### ARCH-02: `src/helpers/` module with parsing helpers
+
+`src/helpers/parsePhaseId.mjs`, `src/helpers/deriveDiskStatus.mjs`,
+`src/helpers/loadMilestoneHeading.mjs` exist and export their v0.2
+implementations.
+
+### ARCH-03: `src/format/phase.mjs` placeholder
+
+`src/format/phase.mjs` exports `parsePhaseTitle`, `formatPhaseTitle`,
+`parsePhaseDescription`, `formatPhaseDescription` as placeholders that
+throw `NotImplementedError`. Logic gets written in v1.0 against the
+fork's StorageAdapter contract.
+
+### ARCH-04: `src/adapter.mjs` BeadsAdapter placeholder
+
+`src/adapter.mjs` exports a `BeadsAdapter` class skeleton that throws
+`NotImplementedError` from every method. Provides the stub for v1.0
+implementation; documents the upcoming interface dependency.
+
+### ARCH-05: `package.json` rewritten as adapter library
+
+`package.json` reflects adapter library shape:
+- `exports` map points at `src/adapter.mjs` (and submodules as needed)
+- No `bin` entries (this is a library, not a CLI)
+- `peerDependencies` declare the fork (`get-shit-done` ^x.y.z OR a local
+  symlink during dev)
+- Scripts: `test:unit` (carry-forward tests), no `install` or
+  `postinstall` hooks
+
+## Documentation refresh
+
+### DOC-01: README.md updated for adapter library
+
+`README.md` describes the new architecture: "BeadsAdapter against the
+fork's StorageAdapter interface." Old shadow-architecture description
+removed. Links to fork repo and `.planning/research/fork-investigation/SYNTHESIS.md`.
+
+### DOC-02: CLAUDE.md updated for adapter library
+
+`CLAUDE.md` updated: removes mentions of shadow architecture; describes
+this repo as a sibling adapter implementation; references the fork at
+`~/code/get-shit-done` and the canonical synthesis input. Auto-loaded
+spike-findings skill reference preserved.
+
+## Test infrastructure preservation
+
+### TEST-01: Existing fixture-based tests still pass post-relocation
+
+After the `src/` move, the carry-forward tests still work:
+- `tests/shadow-tests/bd-helper.test.mjs` (renamed if needed; tests
+  `src/bd/helper.mjs`)
+- `tests/shadow-tests/beads-errors.test.mjs` (renamed if needed; tests
+  `src/bd/errors.mjs`)
+- `tests/shadow-tests/findBeadsRoot.test.mjs` (renamed if needed; tests
+  `src/bd/findRoot.mjs`)
+- `tests/fixtures/seed.jsonl` reproduces byte-identically via existing
+  `build-seed.sh` (proves v0.2 determinism contract carries forward)
+- Shadow-specific tests (handler-*.test.mjs, _parity-helpers tests) move
+  to `archive/v0.2-shadow/tests/` since the shadow code they test is
+  archived
+
+## Acceptance criteria (gate v0.3 ship)
+
+- No active code under `bin/` (all archived or moved to `src/`)
+- All shadow hooks archived; nothing self-installs into `~/.claude/`
+- `tests/fixtures/seed.jsonl` byte-identity reproduces via existing
+  `build-seed.sh` after the relocation
+- Carry-forward unit tests pass against new `src/` paths
+- `package.json`, README, CLAUDE.md describe post-cleanup state
+- Working tree clean; tagged `v0.3-complete`
+
+## Out of scope (deferred to v1.0)
+
+- Implementing BeadsAdapter logic (depends on fork's StorageAdapter
+  interface, which doesn't exist yet)
+- Modifying carry-forward helpers' behavior (pure relocation in v0.3)
+- Conformance test suite (depends on fork's MarkdownAdapter for
+  baseline; v1.0 concern)
+- Migration tooling (markdown → bd) — v1.0 concern
+- Integrating with the fork as a peer dep with a real version (v0.3 may
+  use `link:../get-shit-done` placeholder; real npm dep in v1.0)
+
+## Traceability
+
+### Milestone v0.3 — Adapter prep
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CLEAN-01 | (TBD by roadmapper) | Pending |
+| CLEAN-02 | (TBD by roadmapper) | Pending |
+| CLEAN-03 | (TBD by roadmapper) | Pending |
+| CLEAN-04 | (TBD by roadmapper) | Pending |
+| ARCH-01 | (TBD by roadmapper) | Pending |
+| ARCH-02 | (TBD by roadmapper) | Pending |
+| ARCH-03 | (TBD by roadmapper) | Pending |
+| ARCH-04 | (TBD by roadmapper) | Pending |
+| ARCH-05 | (TBD by roadmapper) | Pending |
+| DOC-01 | (TBD by roadmapper) | Pending |
+| DOC-02 | (TBD by roadmapper) | Pending |
+| TEST-01 | (TBD by roadmapper) | Pending |
+
+**Coverage:** 12/12 v0.3 requirements pending phase assignment.

@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: Adapter prep
 status: planning
-last_updated: "2026-04-30T00:00:00.000Z"
+last_updated: "2026-04-30T23:53:46.041Z"
 last_activity: 2026-04-30
 progress:
   total_phases: 0
@@ -11,25 +11,16 @@ progress:
   total_plans: 0
   completed_plans: 0
   percent: 0
-superseded_milestones:
-  - id: v0.1
-    name: Foundation
-    status: complete
-    note: Spike + initial layer + cross-worktree validation. Carries forward to v1.0.
-  - id: v0.2
-    name: Beads-backed reads
-    status: superseded
-    note: Phase 5/8 complete; remaining 3 phases canceled when shadow approach was abandoned in favor of fork-based adapter interface (2026-04-30). All v0.2 reusable work carries forward to v1.0 BeadsAdapter implementation.
 ---
 
 # Project State
 
 ## Current Position
 
-Milestone: v0.3 (Adapter prep)
-Status: planning — ready for `/gsd-new-milestone` to formalize, then
-`/gsd-discuss-phase 1` to scope the cleanup
-Last activity: 2026-04-30
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-30 — Milestone v0.3 started
 
 ## Reference
 
@@ -37,12 +28,15 @@ Last activity: 2026-04-30
   `StorageAdapter` interface (`~/code/get-shit-done` on
   `feat/storage-adapter`); ship a bd-backed storage option for any GSD
   project that opts in.
+
 - **Independent version line:** this repo (gsd-beads) tracks its own
   versions (v0.3 next, then v1.0). The fork has its own v1.0 milestone
   (StorageAdapter interface). Don't conflate them.
+
 - **v0.3 scope:** archive shadow code, restructure as adapter library
   scaffold, preserve carry-forward primitives. Single phase. No fork
   dependency.
+
 - **v1.0 scope:** BeadsAdapter implementation against fork interface.
   Waits for fork's Phase 1 to ship. Refined when interface stabilizes.
 
@@ -52,6 +46,7 @@ Last activity: 2026-04-30
 as a proper adapter library; preserve all carry-forward primitives.
 
 **Single phase, fixed scope:**
+
 - Archive shadow code to `archive/v0.2-shadow/`:
   - `bin/gsd-sdk-shadow.mjs`, `bin/wrap-mutation.mjs`
   - `hooks/block-gsd-sdk-mutation.sh`, `hooks/block-state-md.sh`
@@ -68,6 +63,7 @@ as a proper adapter library; preserve all carry-forward primitives.
   - `src/adapter.mjs` ← BeadsAdapter placeholder (throws not-implemented)
 - `package.json` rewrite: adapter library shape (exports map, no bin
   entries, peer dep on fork)
+
 - `install.sh` rewrite or removal (no more global hook installation)
 - `README.md` + `CLAUDE.md` updated to reflect post-cleanup architecture
 - Tests preserved: `tests/fixtures/` stays canonical;
@@ -75,10 +71,12 @@ as a proper adapter library; preserve all carry-forward primitives.
   when v1.0 conformance suite goes in)
 
 **Success criteria:**
+
 - No active code under `bin/` (archived or moved to `src/`)
 - All shadow hooks archived; nothing self-installs into `~/.claude/`
 - `tests/fixtures/seed.jsonl` still produces byte-identical output via
   existing helpers
+
 - PROJECT.md, STATE.md, CLAUDE.md describe post-cleanup state
 - Working tree clean; tagged `v0.3-complete`
 
@@ -90,8 +88,10 @@ fork-investigation found:
 - ~334 enumerated direct-I/O leaks across upstream GSD bypass the SDK
   surface entirely (workflows, agents, fat skills using Read/Write/Edit
   tools directly)
+
 - A new leak class (`<context>`-block frontmatter `@.planning/...`)
   loads files at skill-activation time, before any shadow can intercept
+
 - Every `/gsd-update` overwrites shadow installations
 - Maintaining handlers in sync with upstream was open-ended
 
@@ -111,9 +111,11 @@ adapter methods proposed, 6 foundational primitives identified).
 2. **Fork name:** keep `get-shit-done` (no rename)
 3. **Upstream sync model:** fork rebases periodically against
    `gsd-build/get-shit-done`
+
 4. **Adapter capability negotiation:** `adapter.capabilities = { ... }` flag
 5. **Independent version lines:** fork has its own v1.0; this repo tracks
    its own v0.3 → v1.0 sequence
+
 6. **SYNTHESIS.md is canonical** scope input for v1.0 BeadsAdapter
 
 See `.planning/DECISIONS.md` for full record + rationale.
@@ -127,12 +129,15 @@ See `.planning/DECISIONS.md` for full record + rationale.
 ## Session Continuity
 
 Architectural pivot session 2026-04-30:
+
 - Fork-investigation: 10 batch agents classified ~258 artifacts in
   parallel
+
 - Synthesis: SYNTHESIS.md (6515 words, comprehensive adapter draft)
 - 6 pre-flight decisions locked (DECISIONS.md)
 - PROJECT.md rewritten around adapter-implementation model;
   v0.2 superseded; v0.3 (adapter prep) scoped
+
 - Fork repo bootstrapped at `~/code/get-shit-done` on
   `feat/storage-adapter` branch with `.planning/` mirroring research
   inputs
