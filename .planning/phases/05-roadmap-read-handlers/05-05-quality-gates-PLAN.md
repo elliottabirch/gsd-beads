@@ -23,6 +23,9 @@ key_decisions:
   - "Phase 11 will extend handler-roadmap-determinism.test.sh and handler-roadmap-call-count.test.mjs to cover other read handlers as they ship (progress.json, state.json, etc.) — establishing the file-naming convention here lets Phase 11 reuse the structure."
   - "Plan 05 covers BOTH REQ-READ-01 (roadmap.analyze handler shipped in Plan 03) and REQ-READ-02 (roadmap.get-phase handler shipped in Plan 04) — the determinism + call-count regression gates protect both handlers against future N+1 spawn or ordering regressions."
 
+  Decision References:
+  - D-29: Hook-allowlist bd subcommands — only list, show, ready, memories, status, prime, export, deps, children, search are allowed in production read-handler code. Task 3 of this plan verifies bd-allowlist-grep.test.sh (REQ-QUAL-05) remains green after Plans 03/04 added bd export + memories invocations (both are within the allowlist).
+
 must_haves:
   truths:
     - "Running gsd-sdk query roadmap.analyze 5x consecutively on the same fixture produces byte-identical output (REQ-QUAL-06 precursor) — sort by priority, created_at, id is deterministic"
