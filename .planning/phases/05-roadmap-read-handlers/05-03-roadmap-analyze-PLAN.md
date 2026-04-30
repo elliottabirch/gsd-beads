@@ -33,6 +33,14 @@ key_decisions:
   - "Task 3 split into 3a (handler core: parity + counts; ~80 LOC) and 3b (milestone scoping + drift; ~30 LOC + worktree fixture work) per W6. Each sub-task gets its own read_first / acceptance_criteria / action and turns its slice of Wave 0 GREEN incrementally."
   - "D-22..D-29 carry-forward enforcement (W9): grep gates in Task 3a/3b acceptance criteria prove findBeadsRoot is reused (≥2 callers), BeadsUnavailableError stays in dispatcher catch only (NOT in new handler), and wrapMutation count is unchanged from Phase 4 (reads do NOT go through mutation wrapper; second register loop registers raw)."
 
+  Decision References:
+  - D-21: current_phase/next_phase selection mirrors upstream exactly — current_phase = phases.find(p => disk_status === 'planned' || 'partial'); next_phase = phases.find(p => disk_status === 'empty' || 'no_directory' || 'discussed' || 'researched'). Both emit phase number strings, not bead IDs.
+  - D-22: BEADS_READ_OVERRIDES without wrapMutation — reads register via second loop (no mutation wrapper). Handler dispatch wiring in this plan honors the carry-forward: raw handler registration only.
+  - D-23: Sentinel-aware dispatch — BeadsEmpty/BeadsCorrupt thrown by bd() fall through to upstream via the dispatcher's existing try/catch; the handler itself does NOT catch BeadsUnavailableError (except the contained re-throw for the memories call).
+  - D-24: findBeadsRoot() with BEADS_DIR/parent-walk/symlink — handler calls findBeadsRoot before any bd invocation (reused from Phase 4; ≥2 callers enforced by acceptance grep gate).
+  - D-25: bd() helper throws sentinels; handlers stay clean — beadsRoadmapAnalyze does not wrap bd() in try/catch except the narrow memories re-throw path (BeadsUnavailableError only). Dispatcher catch handles fall-through.
+  - D-27: Single bd export --json call per handler invocation; bd memories called once — no caching, no per-phase fan-out (REQ-QUAL-07 precursor). Acceptance criteria enforces `grep -c "bd(['export'" returns 1` and `grep -c "bd(['children'" returns 0`.
+
 must_haves:
   truths:
     - "On a beads-managed fixture seeded from tests/fixtures/seed.jsonl with current-milestone v0.2, `gsd-sdk query roadmap.analyze` returns 10 top-level keys (milestones, phases, phase_count, completed_phases, total_plans, total_summaries, progress_percent, current_phase, next_phase, missing_phase_details) + 2 bd-only keys (backend, drift)"
