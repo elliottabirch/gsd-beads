@@ -1,0 +1,102 @@
+{
+  "milestones": [
+    {
+      "heading": "Milestone v0.2 — Beads-backed reads",
+      "version": "v0.2"
+    }
+  ],
+  "phases": [
+    {
+      "number": "3",
+      "name": "findBeadsRoot",
+      "goal": "Read-side detection and shared test harness.",
+      "depends_on": null,
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_context": false,
+      "has_research": false,
+      "disk_status": "no_directory",
+      "roadmap_complete": false
+    },
+    {
+      "number": "4",
+      "name": "roadmap reads",
+      "goal": "roadmap.analyze + roadmap.get-phase.",
+      "depends_on": "Phase 3",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_context": false,
+      "has_research": false,
+      "disk_status": "no_directory",
+      "roadmap_complete": false
+    },
+    {
+      "number": "5",
+      "name": "progress reads",
+      "goal": "progress.json + progress + progress.bar + progress.table.",
+      "depends_on": "Phase 4",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_context": false,
+      "has_research": false,
+      "disk_status": "no_directory",
+      "roadmap_complete": false
+    },
+    {
+      "number": "6",
+      "name": "state reads",
+      "goal": "state-snapshot + state.json + state.load.",
+      "depends_on": "Phase 5",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_context": false,
+      "has_research": false,
+      "disk_status": "no_directory",
+      "roadmap_complete": false
+    },
+    {
+      "number": "7",
+      "name": "phase resolution",
+      "goal": "find-phase + phases.list + phase.next-decimal + phase-plan-index.",
+      "depends_on": "Phase 6",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_context": false,
+      "has_research": false,
+      "disk_status": "no_directory",
+      "roadmap_complete": false
+    },
+    {
+      "number": "8",
+      "name": "init reads",
+      "goal": "init.progress + init.milestone-op + init.todos.",
+      "depends_on": "Phase 7",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_context": false,
+      "has_research": false,
+      "disk_status": "no_directory",
+      "roadmap_complete": false
+    },
+    {
+      "number": "9",
+      "name": "hook audit",
+      "goal": "Verify the 12 state.* mutation handlers.",
+      "depends_on": "Phase 8",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_context": false,
+      "has_research": false,
+      "disk_status": "no_directory",
+      "roadmap_complete": false
+    }
+  ],
+  "phase_count": 7,
+  "completed_phases": 0,
+  "total_plans": 0,
+  "total_summaries": 0,
+  "progress_percent": 0,
+  "current_phase": null,
+  "next_phase": "3",
+  "missing_phase_details": null
+}
