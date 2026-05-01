@@ -14,6 +14,11 @@ import { resolve as pathResolve } from 'node:path';
 import { resolve as routerResolve } from './pathRouter.mjs';
 import { atomicWriteFile } from './_atomicWrite.mjs';
 import { locateSection, rewriteSection } from '../format/section.mjs';
+import {
+  parseFrontmatter,
+  formatFrontmatter,
+  mergeFrontmatter as fmMerge,
+} from '../format/frontmatter.mjs';
 import { bd } from '../bd/helper.mjs';
 import { BeadsEmpty } from '../bd/errors.mjs';
 
@@ -201,9 +206,88 @@ export default {
     atomicWriteFile(abs, newText);
   },
 
-  async getFrontmatter(path, field)           { NOT_IMPLEMENTED('getFrontmatter', 7, 'PRIM-01'); },
-  async updateFrontmatter(path, field, value) { NOT_IMPLEMENTED('updateFrontmatter', 7, 'PRIM-01'); },
-  async mergeFrontmatter(path, patch)         { NOT_IMPLEMENTED('mergeFrontmatter', 7, 'PRIM-01'); },
+  async getFrontmatter(path, field) {
+    const route = routerResolve(path);
+    if (route.tier === 'bd') {
+      this._ensureBd();
+      const items = bd(['list', '-l', route.label, '--json', '-n', '0']);
+      if (!Array.isArray(items) || !items.length) {
+        return field ? undefined : {};
+      }
+      const fm = _labelsToFrontmatter(items[0]);
+      return field ? fm[field] : fm;
+    }
+    // disk-routed
+    const abs = _abs(this, path);
+    if (!existsSync(abs)) return field ? undefined : {};
+    const text = readFileSync(abs, 'utf-8');
+    const { frontmatter } = parseFrontmatter(text);
+    return field ? frontmatter[field] : frontmatter;
+  },
+
+  /**
+   * Update a single frontmatter field.
+   *
+   * NOTE on bd-routed spawn budget (RESEARCH §OQ-2): label-rewrite paths
+   * may spawn bd up to 3 times (`bd list` for read + `bd label remove`
+   * for old value + `bd label add` for new value). QUAL-07's ≤2-spawn
+   * budget targets read-side methods; write-side label rewrites are
+   * exempt per CONTEXT discretion. Consumers needing a tighter budget
+   * should batch via Bin B domain methods.
+   */
+  async updateFrontmatter(path, field, value) {
+    const route = routerResolve(path);
+    if (route.tier === 'bd') {
+      this._ensureBd();
+      const items = bd(['list', '-l', route.label, '--json', '-n', '0']);
+      if (!Array.isArray(items) || !items.length) {
+        throw new Error(
+          `BeadsAdapter.updateFrontmatter: bd-routed record not found at ${path}`,
+        );
+      }
+      const issue = items[0];
+      // Remove any existing labels with this field's prefix
+      const existingPrefixed = (issue.labels ?? [])
+        .filter((l) => l.startsWith(`${field}:`));
+      for (const old of existingPrefixed) {
+        bd(['label', 'remove', issue.id, old], {
+          env: { ...process.env, BEADS_ACTOR: 'seed' },
+          parseJson: false,
+        });
+      }
+      if (value !== undefined && value !== null) {
+        bd(['label', 'add', issue.id, `${field}:${value}`], {
+          env: { ...process.env, BEADS_ACTOR: 'seed' },
+          parseJson: false,
+        });
+      }
+      return;
+    }
+    // disk-routed: read, merge, write atomically
+    const abs = _abs(this, path);
+    const text = existsSync(abs) ? readFileSync(abs, 'utf-8') : '';
+    const { frontmatter, body } = parseFrontmatter(text);
+    const next = { ...frontmatter, [field]: value };
+    atomicWriteFile(abs, formatFrontmatter(next, body));
+  },
+
+  async mergeFrontmatter(path, patch) {
+    const route = routerResolve(path);
+    if (route.tier === 'bd') {
+      this._ensureBd();
+      // Apply each patch entry sequentially via updateFrontmatter
+      for (const [field, value] of Object.entries(patch ?? {})) {
+        await this.updateFrontmatter(path, field, value);
+      }
+      return;
+    }
+    // disk-routed
+    const abs = _abs(this, path);
+    const text = existsSync(abs) ? readFileSync(abs, 'utf-8') : '';
+    const { frontmatter, body } = parseFrontmatter(text);
+    const merged = fmMerge(frontmatter, patch);
+    atomicWriteFile(abs, formatFrontmatter(merged, body));
+  },
 
   // ---------------------------------------------------------------------
   // PRIM-02 foundational primitives (Plans 06/07 own these 6 methods)
@@ -227,4 +311,24 @@ function _firstSortKey(issue) {
     if (lab) return lab.slice(prefix.length);
   }
   return issue?.id ?? '';
+}
+
+/**
+ * Synthesize a flat frontmatter object from a bd issue's labels.
+ * Per D-03: bd labels of the form `<key>:<value>` become
+ * {<key-with-hyphens-as-underscores>: <value>}; bare labels become
+ * boolean flags. Slice on first colon preserves colons in values.
+ */
+function _labelsToFrontmatter(issue) {
+  const fm = { id: issue.id, status: issue.status };
+  for (const label of issue?.labels ?? []) {
+    const idx = label.indexOf(':');
+    if (idx === -1) {
+      fm[label.replace(/-/g, '_')] = true;
+    } else {
+      const k = label.slice(0, idx).replace(/-/g, '_');
+      fm[k] = label.slice(idx + 1);
+    }
+  }
+  return fm;
 }
