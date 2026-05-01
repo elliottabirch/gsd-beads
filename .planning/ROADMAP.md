@@ -201,7 +201,7 @@ Plans:
 - [x] 07-01-PLAN.md — pathRouter.mjs closed-enum routing registry + UnsupportedOperationError class (PRIM-01, PRIM-02)
 - [x] 07-02-PLAN.md — src/format/section.mjs slugify + locateSection + rewriteSection (PRIM-01, PRIM-02)
 - [x] 07-03-PLAN.md — src/format/frontmatter.mjs flat-scalar YAML parser/formatter/merger (PRIM-01)
-- [ ] 07-04-PLAN.md — Bin A records (getRecord/putRecord/removeRecord/exists/listCollection) + atomicWriteFile helper (PRIM-01)
+- [x] 07-04-PLAN.md — Bin A records (getRecord/putRecord/removeRecord/exists/listCollection) + atomicWriteFile helper (PRIM-01)
 - [ ] 07-05-PLAN.md — Bin A section + frontmatter primitives (5 methods) (PRIM-01, PRIM-02)
 - [ ] 07-06-PLAN.md — recordStateEvent dispatch + writeBinaryAsset throw + capabilities rationale comments (PRIM-02, CAP-01)
 - [ ] 07-07-PLAN.md — snapshot/restore + putNamedDoc/getNamedDoc (16/16 primitives complete) (PRIM-02)
