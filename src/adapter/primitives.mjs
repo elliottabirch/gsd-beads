@@ -20,7 +20,30 @@ import {
   mergeFrontmatter as fmMerge,
 } from '../format/frontmatter.mjs';
 import { bd } from '../bd/helper.mjs';
-import { BeadsEmpty } from '../bd/errors.mjs';
+import { BeadsEmpty, UnsupportedOperationError } from '../bd/errors.mjs';
+
+/**
+ * Discriminated-union event types per D-09. Memory types are stored
+ * via `bd remember --key <milestone>:<type>:<id>`. Comment types are
+ * stored via `bd comments add <milestoneBead> --author gsd:event:<type>`
+ * (D-09 amendment per RESEARCH Pitfall 1: bd v1.0.3 doesn't support
+ * `--label` on comments; `--author` provides the structured slot).
+ */
+const MEMORY_EVENT_TYPES = Object.freeze(new Set([
+  'decision',
+  'blocker_added',
+  'blocker_resolved',
+  'metric',
+  'todo_count_update',
+  'deferred_items',
+  'roadmap_evolution',
+]));
+
+const COMMENT_EVENT_TYPES = Object.freeze(new Set([
+  'session',
+  'quick_task',
+  'forensic_session',
+]));
 
 const NOT_IMPLEMENTED = (name, phase, impl) => {
   throw new Error('BeadsAdapter.' + name + ': not implemented (Phase ' + phase + ' / ' + impl + ')');
@@ -292,12 +315,94 @@ export default {
   // ---------------------------------------------------------------------
   // PRIM-02 foundational primitives (Plans 06/07 own these 6 methods)
   // ---------------------------------------------------------------------
-  async recordStateEvent({ type, payload })   { NOT_IMPLEMENTED('recordStateEvent', 7, 'PRIM-02'); },
+
+  /**
+   * Record a state event into bd via discriminated-union dispatch (D-09).
+   *
+   * - MEMORY_EVENT_TYPES (7) — decision, blocker_added, blocker_resolved,
+   *   metric, todo_count_update, deferred_items, roadmap_evolution —
+   *   write a bd memory under `<milestone>:<type>:<id>` (1 spawn).
+   * - COMMENT_EVENT_TYPES (3) — session, quick_task, forensic_session —
+   *   author a bd comment on the active milestone bead via
+   *   `--author gsd:event:<type>` (D-09 amendment per RESEARCH Pitfall 1:
+   *   bd v1.0.3 doesn't accept `--label` on comments). 2 spawns
+   *   (resolve milestone bead + write comment).
+   *
+   * Unknown types throw `Error('recordStateEvent: unknown type "<x>"')`.
+   */
+  async recordStateEvent({ type, payload }) {
+    if (typeof type !== 'string' || type.length === 0) {
+      throw new TypeError('recordStateEvent: type must be a non-empty string');
+    }
+    if (!payload || typeof payload !== 'object') {
+      throw new TypeError('recordStateEvent: payload must be an object');
+    }
+    this._ensureBd();
+
+    if (MEMORY_EVENT_TYPES.has(type)) {
+      // Per D-09: <milestone>:<type>:<id>
+      const id = payload.id ?? payload.decision_id ?? payload.metric_id;
+      if (!id) {
+        throw new Error(
+          `recordStateEvent: type=${type} requires payload.id (or .decision_id/.metric_id)`
+        );
+      }
+      const milestone = payload.milestone;
+      if (!milestone) {
+        throw new Error(
+          `recordStateEvent: type=${type} requires payload.milestone`
+        );
+      }
+      const key = `${milestone}:${type}:${id}`;
+      // bd remember overwrites in place per spike-findings memory key namespacing.
+      // Single spawn — within QUAL-07 budget.
+      // cwd routed through this._beadsRoot so the call targets the adapter's
+      // bd database, not whatever process.cwd() happens to be (Rule 1 fix —
+      // also required for COMMENT_EVENT_TYPES dispatch below).
+      bd(['remember', JSON.stringify(payload), '--key', key], {
+        cwd: this._beadsRoot,
+        env: { ...process.env, BEADS_ACTOR: 'seed' },
+        parseJson: false,
+      });
+      return { storage: 'memory', key };
+    }
+
+    if (COMMENT_EVENT_TYPES.has(type)) {
+      // Per D-09 amendment: comments authored as `gsd:event:<type>`
+      // (bd v1.0.3 does NOT support --label on comments — RESEARCH Pitfall 1).
+      // 2 spawns: 1 to resolve milestone bead, 1 to write the comment.
+      const milestoneBead = _resolveMilestoneBead(this, payload.milestone);
+      bd(
+        ['comments', 'add', milestoneBead, '--author', `gsd:event:${type}`, JSON.stringify(payload)],
+        {
+          cwd: this._beadsRoot,
+          env: { ...process.env, BEADS_ACTOR: 'seed' },
+          parseJson: false,
+        }
+      );
+      return { storage: 'comment', bead: milestoneBead, author: `gsd:event:${type}` };
+    }
+
+    throw new Error(`recordStateEvent: unknown type "${type}"`);
+  },
+
   async snapshot()                            { NOT_IMPLEMENTED('snapshot', 7, 'PRIM-02'); },
   async restore(snapshotRef)                  { NOT_IMPLEMENTED('restore', 7, 'PRIM-02'); },
   async putNamedDoc(category, key, body)      { NOT_IMPLEMENTED('putNamedDoc', 7, 'PRIM-02'); },
   async getNamedDoc(category, key)            { NOT_IMPLEMENTED('getNamedDoc', 7, 'PRIM-02'); },
-  async writeBinaryAsset(path, bytes)         { NOT_IMPLEMENTED('writeBinaryAsset', 7, 'PRIM-02'); },
+
+  /**
+   * Always throws UnsupportedOperationError with the locked D-16 message
+   * format. bd does not store binaries natively (capabilities.binaryAsset
+   * = false). v1.1+ may add a configurable external blob sink.
+   */
+  async writeBinaryAsset(path, bytes) {
+    throw new UnsupportedOperationError(
+      'writeBinaryAsset',
+      'binaryAsset',
+      'bd does not store binaries natively. Configure an external sink in v1.1+.'
+    );
+  },
 };
 
 /**
@@ -331,4 +436,27 @@ function _labelsToFrontmatter(issue) {
     }
   }
   return fm;
+}
+
+/**
+ * Resolve the milestone bead for comment event dispatch.
+ * Looks up an issue with labels `gsd:milestone` + `version:<milestone>`.
+ * Falls back to the most recent open milestone if `payload.milestone`
+ * is absent.
+ *
+ * Returns the bead id (e.g., 'sd-abc'). Throws if no milestone bead is found.
+ */
+function _resolveMilestoneBead(adapter, milestoneVersion) {
+  adapter._ensureBd();
+  // 1 spawn: list bd issues with the milestone label-pair
+  const args = ['list', '-l', 'gsd:milestone', '--json', '-n', '0'];
+  if (milestoneVersion) args.push('-l', `version:${milestoneVersion}`);
+  const items = bd(args, { cwd: adapter._beadsRoot });
+  if (!Array.isArray(items) || !items.length) {
+    throw new Error(
+      `recordStateEvent: no milestone bead found (milestone=${milestoneVersion ?? '<active>'})`
+    );
+  }
+  // Deterministic pick: most recently updated open milestone wins
+  return items[0].id;
 }
