@@ -76,6 +76,7 @@ completed: 2026-04-30
 Plan 03 was committed as a single atomic move-set commit because both tasks are pure `git mv` operations with no test gates between them, and a single `git mv` block makes the rename detection deterministic.
 
 1. **Task 1 (26 individual files + snapshots/) AND Task 2 (5 wholesale dirs)** — `24f482d` (chore)
+2. **Plan 03 documentation (this SUMMARY)** — `0fc3b08` (docs)
 
 ## Files Created/Modified
 
@@ -126,17 +127,25 @@ Plan 03 was committed as a single atomic move-set commit because both tasks are 
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Switched from `gsd-sdk query commit` to raw `git commit` to scope this plan's commit to its own files**
-- **Found during:** Final commit step
-- **Issue:** The executor context said Plan 06-02 runs in a "parallel file tree" but the parallel plan's `git mv` renames were already staged in this same shared working tree (bin/*, hooks/*, scripts/*, install.sh, tests/run-*.sh, tests/scripts/*). The SDK's `gsd-sdk query commit "<msg>" --files <list>` command does NOT filter staged files by `--files`; it commits the entire staged index. Two SDK-driven commit attempts (`8c6ea06` "test", `0dcdc7c` "test message") accidentally absorbed Plan 02's pending renames into Plan 03's commit. Both were soft-reset before any further work.
+- **Found during:** Final commit step (after both task-level archival moves were verified)
+- **Issue:** The executor context said Plan 06-02 runs in a "parallel file tree" but the parallel plan's `git mv` renames were already staged in this same shared working tree (`bin/*`, `hooks/*`, `scripts/*`, `install.sh`, `tests/run-*.sh`, `tests/scripts/*`). The SDK's `gsd-sdk query commit "<msg>" --files <list>` command does NOT filter staged files by `--files`; it commits the entire staged index. Two SDK-driven commit attempts (`8c6ea06` "test", `0dcdc7c` "test message") accidentally absorbed Plan 02's pending renames into Plan 03's commit. Both were soft-reset before any further work.
 - **Fix:** After the second soft-reset, ran `git reset` (mixed) to unstage everything, then re-staged only Plan 03's owned paths with explicit `git add -A <source-path> <archive-dest-path>` invocations (one pair per shadow-test file, plus the snapshots dir and the 5 wholesale dirs). Committed via raw `git commit -m` with HEREDOC. Final result: commit `24f482d` contains exactly 55 renames, all in `tests/` → `archive/v0.2-shadow/tests/`, none in `bin/`, `hooks/`, `scripts/`, or `install.sh`.
 - **Files modified:** No file changes — index discipline only.
 - **Verification:** `git show --stat 24f482d` shows 55 file renames, all matching Plan 03's `files_modified` list. Plan 02's pending renames remain unstaged in the working tree, ready for Plan 02's own commit.
-- **Committed in:** `24f482d` (the single Plan 03 commit).
+- **Committed in:** `24f482d` (the Plan 03 archival commit).
+
+**2. [Rule 3 - Blocking] Recurrence on SUMMARY commit — re-applied staging discipline**
+- **Found during:** SUMMARY.md final commit
+- **Issue:** Between commit `24f482d` and the SUMMARY commit, Plan 02's parallel agent re-staged its 11 renames + 3 deletions into the shared index. A `git add SUMMARY.md` followed by `git commit` swept those re-staged entries into commit `8e466f4`, contaminating Plan 03's documentation commit with Plan 02's source archival.
+- **Fix:** Soft-reset commit `8e466f4`, used `git restore --staged <each-Plan-02-path>` to unstage all 25 Plan 02 entries (14 source-path renames-plus-deletions + 11 archive-path additions), then `git add` only the SUMMARY and committed via raw `git commit` again. Final SUMMARY commit `0fc3b08` contains exactly 1 file (SUMMARY.md, 175 insertions).
+- **Files modified:** No file changes — index discipline only.
+- **Verification:** `git show --stat 0fc3b08` reports 1 file changed, 175 insertions, 0 deletions. Plan 02's renames remain unstaged in the working tree.
+- **Committed in:** `0fc3b08` (the Plan 03 documentation commit).
 
 ---
 
-**Total deviations:** 1 auto-fixed (1 blocking — tooling).
-**Impact on plan:** Plan execution itself was exactly per spec (26 files + snapshots + 5 dirs archived via git mv). The deviation was purely about commit-time index hygiene given the unexpected shared-tree parallel execution. No scope change.
+**Total deviations:** 2 auto-fixed (both Rule 3 — same root cause: shared working tree with parallel-wave plan + active Plan 02 staging cycle racing my commits).
+**Impact on plan:** Plan execution itself was exactly per spec (26 files + snapshots + 5 dirs archived via git mv). Both deviations were purely about commit-time index hygiene given the unexpected shared-tree parallel execution. No scope change. **Lesson:** When running parallel-wave plans in a shared working tree, always inspect `git diff --cached --name-only` immediately before commit and unstage anything outside the current plan's files_modified manifest, even if you only just added one file — the index is not yours alone.
 
 ## Issues Encountered
 
