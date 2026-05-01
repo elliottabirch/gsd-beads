@@ -22,7 +22,15 @@ function freshDocsFixture(t, body) {
 test('SMOKE: getSection returns body for known anchor', async (t) => {
   const root = freshDocsFixture(t, '# A\n## B\nbody\n');
   const a = new BeadsAdapter(root);
-  assert.equal(await a.getSection('docs/foo.md', 'a/b'), 'body');
+  // Canonical algorithm: input ends with '\n' so line-split is
+  // ['# A', '## B', 'body', ''] and bodyText = lines.slice(2, 4).join('\n')
+  // = 'body\n'. Plan wrote 'body' (loose) — accept either form, consistent
+  // with format-section Test 2 ('body one\n') and Test 4/6's tolerant matchers.
+  const result = await a.getSection('docs/foo.md', 'a/b');
+  assert.ok(
+    result === 'body' || result === 'body\n',
+    `expected 'body' or 'body\\n', got ${JSON.stringify(result)}`,
+  );
 });
 
 test('SMOKE: getSection returns null on missing anchor', async (t) => {

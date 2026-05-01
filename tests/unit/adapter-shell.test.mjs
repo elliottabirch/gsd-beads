@@ -40,7 +40,7 @@ test('ARCH-04: stub methods throw canonical message format', async () => {
 
   // Spot-check one method from each of the 8 cluster files.
   const samples = [
-    ['getSection', '/tmp/foo', 'h'],      // primitives (Phase 7 Plan 04 implemented getRecord; getSection is still-stubbed Plan 05 work)
+    ['snapshot'],                         // primitives (Phase 7 Plan 04+05 implemented Bin A; snapshot is still-stubbed PRIM-02 work for Plan 06/07)
     ['addPhase', { description: 'x' }],   // phaseLifecycle
     ['getRoadmap'],                       // roadmapMilestone
     ['getStateSnapshot'],                 // state

@@ -13,6 +13,7 @@ import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { resolve as pathResolve } from 'node:path';
 import { resolve as routerResolve } from './pathRouter.mjs';
 import { atomicWriteFile } from './_atomicWrite.mjs';
+import { locateSection, rewriteSection } from '../format/section.mjs';
 import { bd } from '../bd/helper.mjs';
 import { BeadsEmpty } from '../bd/errors.mjs';
 
@@ -151,8 +152,55 @@ export default {
   // ---------------------------------------------------------------------
   // PRIM-01 Bin A: section + frontmatter (Plan 05 owns these 5 methods)
   // ---------------------------------------------------------------------
-  async getSection(path, anchor)              { NOT_IMPLEMENTED('getSection', 7, 'PRIM-01'); },
-  async updateSection(path, anchor, body, mode) { NOT_IMPLEMENTED('updateSection', 7, 'PRIM-01'); },
+
+  async getSection(path, anchor) {
+    const route = routerResolve(path);
+    if (route.tier === 'bd') {
+      // bd-routed sections (rare — only the singleton kinds with description bodies)
+      this._ensureBd();
+      const items = bd(['list', '-l', route.label, '--json', '-n', '0']);
+      if (!Array.isArray(items) || !items.length) return null;
+      // Description body is rendered to text and parsed via locateSection
+      const text = items[0].description ?? '';
+      const loc = locateSection(text, anchor);
+      return loc ? loc.bodyText : null;
+    }
+    // disk-routed
+    const abs = _abs(this, path);
+    if (!existsSync(abs)) return null;
+    const text = readFileSync(abs, 'utf-8');
+    const loc = locateSection(text, anchor);
+    return loc ? loc.bodyText : null;
+  },
+
+  async updateSection(path, anchor, body, mode = 'overwrite') {
+    const route = routerResolve(path);
+    if (route.tier === 'bd') {
+      this._ensureBd();
+      // bd-routed: read description, rewrite section, write back via
+      // `bd update --description`. 2 spawns total (read + write).
+      const items = bd(['list', '-l', route.label, '--json', '-n', '0']);
+      if (!Array.isArray(items) || !items.length) {
+        throw new Error(
+          `BeadsAdapter.updateSection: bd-routed record not found at ${path}`,
+        );
+      }
+      const issue = items[0];
+      const oldText = issue.description ?? '';
+      const newText = rewriteSection(oldText, anchor, body, mode);
+      bd(['update', issue.id, '--description', newText], {
+        env: { ...process.env, BEADS_ACTOR: 'seed' },
+        parseJson: false,
+      });
+      return;
+    }
+    // disk-routed: read, rewrite, atomic write per D-08
+    const abs = _abs(this, path);
+    const oldText = existsSync(abs) ? readFileSync(abs, 'utf-8') : '';
+    const newText = rewriteSection(oldText, anchor, body, mode);
+    atomicWriteFile(abs, newText);
+  },
+
   async getFrontmatter(path, field)           { NOT_IMPLEMENTED('getFrontmatter', 7, 'PRIM-01'); },
   async updateFrontmatter(path, field, value) { NOT_IMPLEMENTED('updateFrontmatter', 7, 'PRIM-01'); },
   async mergeFrontmatter(path, patch)         { NOT_IMPLEMENTED('mergeFrontmatter', 7, 'PRIM-01'); },
