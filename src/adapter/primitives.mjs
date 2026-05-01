@@ -76,7 +76,11 @@ export default {
       this._ensureBd();
       // ≤2 bd spawns per D-21. Single `bd list` with the singleton/label
       // filter; client-side single-element pick.
-      const items = bd(['list', '-l', route.label, '--json', '-n', '0']);
+      // `--all` so closed records are returned (Rule 1 fix during Plan 09 —
+      // bd's default filter drops status=closed which would silently miss
+      // closed roadmap/requirements entries).
+      // cwd: this._beadsRoot per deferred-items.md (Rule 3 — Plan 09 cwd-pass audit).
+      const items = bd(['list', '-l', route.label, '--json', '--all', '-n', '0'], { cwd: this._beadsRoot });
       // The shape returned is the bd issue object (or undefined for missing).
       // For singleton kinds (roadmap, requirements), the first match is
       // returned. For multi-record kinds, this primitive is not the lookup
@@ -135,11 +139,16 @@ export default {
       // ≤2 bd spawns per D-21. Single `bd list -l <primary-label>` call;
       // optional `filter` adds an additional --label arg (still 1 spawn
       // because both labels are passed in the same invocation).
-      const args = ['list', '-l', route.label, '--json', '-n', '0'];
+      // `--all` so closed records are returned alongside open ones (D-04
+      // requires deterministic ordering across the full collection; bd's
+      // default filters out status=closed which would silently drop seed
+      // content like the v0.1 closed phases — Rule 1 fix during Plan 09).
+      const args = ['list', '-l', route.label, '--json', '--all', '-n', '0'];
       if (filter && typeof filter === 'string') {
         args.push('-l', filter);
       }
-      const items = bd(args);
+      // cwd: this._beadsRoot per deferred-items.md (Rule 3 — Plan 09 cwd-pass audit).
+      const items = bd(args, { cwd: this._beadsRoot });
       // Deterministic sort per D-04 / QUAL-06 carry-forward. Sort by
       // numeric phase-id when present, else by id (string). Phase epics
       // carry phase-id:NN labels; plans carry plan-id:NN-MM labels.
@@ -173,8 +182,10 @@ export default {
       try {
         // For singleton kinds, listing by label is the cheapest existence
         // check (≤1 spawn). Returns the bd export-shape array; non-empty
-        // implies at least one matching record.
-        const items = bd(['list', '-l', route.label, '--json', '-n', '0']);
+        // implies at least one matching record. `--all` so closed records
+        // are detected (Rule 1 fix during Plan 09).
+        // cwd: this._beadsRoot per deferred-items.md (Rule 3 — Plan 09 cwd-pass audit).
+        const items = bd(['list', '-l', route.label, '--json', '--all', '-n', '0'], { cwd: this._beadsRoot });
         return Array.isArray(items) && items.length > 0;
       } catch (err) {
         if (err instanceof BeadsEmpty) return false;
@@ -194,7 +205,10 @@ export default {
     if (route.tier === 'bd') {
       // bd-routed sections (rare — only the singleton kinds with description bodies)
       this._ensureBd();
-      const items = bd(['list', '-l', route.label, '--json', '-n', '0']);
+      // `--all` so closed records' descriptions are still readable (Rule 1
+      // fix during Plan 09).
+      // cwd: this._beadsRoot per deferred-items.md (Rule 3 — Plan 09 cwd-pass audit).
+      const items = bd(['list', '-l', route.label, '--json', '--all', '-n', '0'], { cwd: this._beadsRoot });
       if (!Array.isArray(items) || !items.length) return null;
       // Description body is rendered to text and parsed via locateSection
       const text = items[0].description ?? '';
@@ -215,7 +229,9 @@ export default {
       this._ensureBd();
       // bd-routed: read description, rewrite section, write back via
       // `bd update --description`. 2 spawns total (read + write).
-      const items = bd(['list', '-l', route.label, '--json', '-n', '0']);
+      // `--all` so closed records remain mutable (Rule 1 fix during Plan 09).
+      // cwd: this._beadsRoot per deferred-items.md (Rule 3 — Plan 09 cwd-pass audit).
+      const items = bd(['list', '-l', route.label, '--json', '--all', '-n', '0'], { cwd: this._beadsRoot });
       if (!Array.isArray(items) || !items.length) {
         throw new Error(
           `BeadsAdapter.updateSection: bd-routed record not found at ${path}`,
@@ -225,6 +241,7 @@ export default {
       const oldText = issue.description ?? '';
       const newText = rewriteSection(oldText, anchor, body, mode);
       bd(['update', issue.id, '--description', newText], {
+        cwd: this._beadsRoot,
         env: { ...process.env, BEADS_ACTOR: 'seed' },
         parseJson: false,
       });
@@ -241,7 +258,10 @@ export default {
     const route = routerResolve(path);
     if (route.tier === 'bd') {
       this._ensureBd();
-      const items = bd(['list', '-l', route.label, '--json', '-n', '0']);
+      // `--all` so frontmatter on closed records is still inspectable
+      // (Rule 1 fix during Plan 09).
+      // cwd: this._beadsRoot per deferred-items.md (Rule 3 — Plan 09 cwd-pass audit).
+      const items = bd(['list', '-l', route.label, '--json', '--all', '-n', '0'], { cwd: this._beadsRoot });
       if (!Array.isArray(items) || !items.length) {
         return field ? undefined : {};
       }
@@ -270,7 +290,10 @@ export default {
     const route = routerResolve(path);
     if (route.tier === 'bd') {
       this._ensureBd();
-      const items = bd(['list', '-l', route.label, '--json', '-n', '0']);
+      // `--all` so frontmatter on closed records remains mutable
+      // (Rule 1 fix during Plan 09).
+      // cwd: this._beadsRoot per deferred-items.md (Rule 3 — Plan 09 cwd-pass audit).
+      const items = bd(['list', '-l', route.label, '--json', '--all', '-n', '0'], { cwd: this._beadsRoot });
       if (!Array.isArray(items) || !items.length) {
         throw new Error(
           `BeadsAdapter.updateFrontmatter: bd-routed record not found at ${path}`,
@@ -282,12 +305,14 @@ export default {
         .filter((l) => l.startsWith(`${field}:`));
       for (const old of existingPrefixed) {
         bd(['label', 'remove', issue.id, old], {
+          cwd: this._beadsRoot,
           env: { ...process.env, BEADS_ACTOR: 'seed' },
           parseJson: false,
         });
       }
       if (value !== undefined && value !== null) {
         bd(['label', 'add', issue.id, `${field}:${value}`], {
+          cwd: this._beadsRoot,
           env: { ...process.env, BEADS_ACTOR: 'seed' },
           parseJson: false,
         });
@@ -606,8 +631,10 @@ function _labelsToFrontmatter(issue) {
  */
 function _resolveMilestoneBead(adapter, milestoneVersion) {
   adapter._ensureBd();
-  // 1 spawn: list bd issues with the milestone label-pair
-  const args = ['list', '-l', 'gsd:milestone', '--json', '-n', '0'];
+  // 1 spawn: list bd issues with the milestone label-pair.
+  // `--all` so closed milestones (e.g. v0.1, v0.2) are also resolvable
+  // (Rule 1 fix during Plan 09).
+  const args = ['list', '-l', 'gsd:milestone', '--json', '--all', '-n', '0'];
   if (milestoneVersion) args.push('-l', `version:${milestoneVersion}`);
   const items = bd(args, { cwd: adapter._beadsRoot });
   if (!Array.isArray(items) || !items.length) {
