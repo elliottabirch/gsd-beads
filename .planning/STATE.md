@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3
-milestone_name: Adapter prep
+milestone: v1.0
+milestone_name: BeadsAdapter
 status: planning
-last_updated: "2026-04-30T23:53:46.041Z"
-last_activity: 2026-04-30
+last_updated: "2026-05-01T00:00:12.083Z"
+last_activity: 2026-05-01
 progress:
   total_phases: 0
   completed_phases: 0
@@ -20,7 +20,7 @@ progress:
 Phase: Not started (defining requirements)
 Plan: —
 Status: Defining requirements
-Last activity: 2026-04-30 — Milestone v0.3 started
+Last activity: 2026-05-01 — Milestone v1.0 started
 
 ## Reference
 

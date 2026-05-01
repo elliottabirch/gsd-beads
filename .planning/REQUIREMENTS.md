@@ -282,9 +282,11 @@ correct bd-derived state on a beads-managed fixture.
 
 ---
 
-# Milestone v0.3 Requirements — Adapter prep
+# Milestone v1.0 Requirements — BeadsAdapter
 
-Single phase. Pure cleanup + scaffolding. No fork dependency.
+Full BeadsAdapter implementation against SYNTHESIS.md §4 spec
+(~75 methods). Cleanup + scaffolding folded in. Implements in parallel
+with fork's interface evolution; refactors when fork's contract stabilizes.
 
 ## Cleanup (archival of v0.2 shadow architecture)
 
@@ -298,129 +300,331 @@ preserved as historical reference (not `git rm`).
 
 `hooks/block-gsd-sdk-mutation.sh` and `hooks/block-state-md.sh` move to
 `archive/v0.2-shadow/hooks/`. `hooks/bd-sync.sh` moves to the same
-archive directory (its cascade-trigger logic carries forward as input
-to v1.0 but isn't currently active).
+archive directory.
 
 ### CLEAN-03: Obsolete regen scripts archived
 
 `scripts/regen-roadmap.sh` and `scripts/regen-requirements.sh` move to
-`archive/v0.2-shadow/scripts/`. The cascade-loop logic (`scripts/cascade-loop.sh`)
-stays — it remains useful as a bd primitive carry-forward.
+`archive/v0.2-shadow/scripts/`. `scripts/cascade-loop.sh` stays
+(carry-forward bd primitive).
 
 ### CLEAN-04: Install script removed or repurposed
 
-`install.sh` is removed (this repo is no longer a system layer that
-installs hooks into `~/.claude/`). If a stub remains, it documents the
-new architecture (npm package, fork-link).
+`install.sh` removed (this repo is no longer a system layer).
 
 ## Architecture (src/ layout for adapter library)
 
 ### ARCH-01: `src/bd/` module with bd CLI primitives
 
 `src/bd/helper.mjs`, `src/bd/errors.mjs`, `src/bd/findRoot.mjs` exist
-and export the v0.2 carry-forward primitives (`bd-helper.mjs`,
-`beads-errors.mjs`, `findBeadsRoot()` extracted from shadow). Logic
-unchanged — pure relocation + minor module-shape adjustment.
+and export the v0.2 carry-forward primitives. Logic unchanged — pure
+relocation + minor module-shape adjustment.
 
 ### ARCH-02: `src/helpers/` module with parsing helpers
 
 `src/helpers/parsePhaseId.mjs`, `src/helpers/deriveDiskStatus.mjs`,
-`src/helpers/loadMilestoneHeading.mjs` exist and export their v0.2
-implementations.
+`src/helpers/detectDrift.mjs`, `src/helpers/loadMilestoneHeading.mjs`
+exist and export their v0.2 implementations.
 
-### ARCH-03: `src/format/phase.mjs` placeholder
+### ARCH-03: `src/format/phase.mjs` bidirectional format module
 
 `src/format/phase.mjs` exports `parsePhaseTitle`, `formatPhaseTitle`,
-`parsePhaseDescription`, `formatPhaseDescription` as placeholders that
-throw `NotImplementedError`. Logic gets written in v1.0 against the
-fork's StorageAdapter contract.
+`parsePhaseDescription`, `formatPhaseDescription` with real
+implementations. Bidirectional contract: `parse(format(x)) === x`
+verified by property tests for all canonical cases.
 
-### ARCH-04: `src/adapter.mjs` BeadsAdapter placeholder
+### ARCH-04: `src/adapter.mjs` BeadsAdapter class
 
-`src/adapter.mjs` exports a `BeadsAdapter` class skeleton that throws
-`NotImplementedError` from every method. Provides the stub for v1.0
-implementation; documents the upcoming interface dependency.
+`src/adapter.mjs` exports `BeadsAdapter` class that implements the
+StorageAdapter interface from SYNTHESIS.md §4. Class is constructed
+with a project root and validates bd availability via `findBeadsRoot()`.
 
 ### ARCH-05: `package.json` rewritten as adapter library
 
 `package.json` reflects adapter library shape:
-- `exports` map points at `src/adapter.mjs` (and submodules as needed)
-- No `bin` entries (this is a library, not a CLI)
-- `peerDependencies` declare the fork (`get-shit-done` ^x.y.z OR a local
-  symlink during dev)
-- Scripts: `test:unit` (carry-forward tests), no `install` or
-  `postinstall` hooks
+- `exports` map points at `src/adapter.mjs` and selected submodules
+- No `bin` entries (library, not CLI)
+- `peerDependencies` declare the fork (`get-shit-done` ^1.x OR
+  `link:../get-shit-done` during dev)
+- Scripts: `test:unit`, `test:conformance`, no `install`/`postinstall`
 
 ## Documentation refresh
 
-### DOC-01: README.md updated for adapter library
+### DOC-01: README.md describes adapter library
 
-`README.md` describes the new architecture: "BeadsAdapter against the
-fork's StorageAdapter interface." Old shadow-architecture description
-removed. Links to fork repo and `.planning/research/fork-investigation/SYNTHESIS.md`.
+`README.md` describes architecture, install path, config snippet
+(`storage.adapter: beads`), implemented method coverage, and refactor-
+on-fork-interface-stabilize policy.
 
-### DOC-02: CLAUDE.md updated for adapter library
+### DOC-02: CLAUDE.md describes this repo as adapter sibling
 
-`CLAUDE.md` updated: removes mentions of shadow architecture; describes
-this repo as a sibling adapter implementation; references the fork at
-`~/code/get-shit-done` and the canonical synthesis input. Auto-loaded
-spike-findings skill reference preserved.
+`CLAUDE.md` updated to reflect adapter library role; references fork at
+`~/code/get-shit-done` and `.planning/research/fork-investigation/SYNTHESIS.md`
+as canonical input. Spike-findings skill auto-load preserved.
 
-## Test infrastructure preservation
+## Capabilities + foundational primitives
 
-### TEST-01: Existing fixture-based tests still pass post-relocation
+### CAP-01: Adapter capabilities flag
 
-After the `src/` move, the carry-forward tests still work:
-- `tests/shadow-tests/bd-helper.test.mjs` (renamed if needed; tests
-  `src/bd/helper.mjs`)
-- `tests/shadow-tests/beads-errors.test.mjs` (renamed if needed; tests
-  `src/bd/errors.mjs`)
-- `tests/shadow-tests/findBeadsRoot.test.mjs` (renamed if needed; tests
-  `src/bd/findRoot.mjs`)
-- `tests/fixtures/seed.jsonl` reproduces byte-identically via existing
-  `build-seed.sh` (proves v0.2 determinism contract carries forward)
-- Shadow-specific tests (handler-*.test.mjs, _parity-helpers tests) move
-  to `archive/v0.2-shadow/tests/` since the shadow code they test is
-  archived
+`BeadsAdapter` exposes a static `capabilities` object declaring supported
+features per D-2026-04-30-05:
+```js
+{
+  record: true,
+  section: true,
+  binaryAsset: false,        // bd doesn't store binaries natively; will route to external blob store or error
+  snapshot: true,
+  transaction: false,        // bd has no atomic multi-bead transaction primitive
+  namedDoc: true,
+  commitPlanningState: false // OQ-01: beads is its own transactional store; no-op semantics TBD per fork
+}
+```
+Final flag values may shift as implementation reveals constraints; flag
+shape is the contract.
 
-## Acceptance criteria (gate v0.3 ship)
+### PRIM-01: Bin A — generic CRUD primitives
 
-- No active code under `bin/` (all archived or moved to `src/`)
-- All shadow hooks archived; nothing self-installs into `~/.claude/`
-- `tests/fixtures/seed.jsonl` byte-identity reproduces via existing
-  `build-seed.sh` after the relocation
-- Carry-forward unit tests pass against new `src/` paths
-- `package.json`, README, CLAUDE.md describe post-cleanup state
-- Working tree clean; tagged `v0.3-complete`
+10 generic CRUD methods per SYNTHESIS.md §4 "Bin A":
+`getRecord(path)`, `putRecord(path, body)`, `removeRecord(path)`,
+`listCollection(prefix, filter?)`, `exists(path)`,
+`getSection(path, anchor)`, `updateSection(path, anchor, body, mode)`,
+`getFrontmatter(path, field?)`, `updateFrontmatter(path, field, value)`,
+`mergeFrontmatter(path, patch)`.
+For bd-managed records, paths translate to bd queries; for raw markdown
+records (PLAN.md, SPEC.md narrative files), they pass through to disk.
 
-## Out of scope (deferred to v1.0)
+### PRIM-02: 6 foundational primitives
 
-- Implementing BeadsAdapter logic (depends on fork's StorageAdapter
-  interface, which doesn't exist yet)
-- Modifying carry-forward helpers' behavior (pure relocation in v0.3)
-- Conformance test suite (depends on fork's MarkdownAdapter for
-  baseline; v1.0 concern)
-- Migration tooling (markdown → bd) — v1.0 concern
-- Integrating with the fork as a peer dep with a real version (v0.3 may
-  use `link:../get-shit-done` placeholder; real npm dep in v1.0)
+Per SYNTHESIS.md §4 "Foundational primitives":
+- `updateSection(file, sectionId, body, mode)` — section-scoped writes
+  (also a Bin A method; cross-cutting use)
+- `getSection(file, anchor)` — section-scoped reads (same)
+- `recordStateEvent({type, payload})` — discriminated-union event record
+  over types: `roadmap_evolution`, `decision`, `blocker_added`,
+  `blocker_resolved`, `metric`, `session`, `todo_count_update`,
+  `deferred_items`, `forensic_session`, `quick_task` (per
+  SYNTHESIS §4 state cluster)
+- `snapshot()/restore()` — adapter-level checkpoint capability for
+  dry-run hoist; bd implementation snapshots the JSONL + memories
+- `putNamedDoc(category, key, body)` / `getNamedDoc(category, key)` —
+  closed-enum kv (intel, codebase, research, archived-milestone, etc.)
+- `writeBinaryAsset(path, bytes)` — declares unsupported via capabilities
+  flag; throws or routes to external blob store
+
+## Bin B implementation (~58 methods, by cluster per SYNTHESIS.md §4)
+
+### IMPL-01: Phase/plan lifecycle methods (~15)
+
+Per SYNTHESIS.md §4 "Phase/plan lifecycle". Includes `addPhase`,
+`addPhaseBatch`, `insertPhase`, `removePhase`, `completePhaseAndCascade`,
+`completeMilestone`, `archivePhases`, `clearPhases`, `findNextDecimalPhase`,
+`scaffoldPhaseArtifact`, `addBacklogEntry`, `promoteBacklogEntry`,
+`removeBacklogEntry`, `getPhase`, `findPhase`, `listPhases`,
+`listPhasePlans`, `listPhaseSummaries`, `listPhaseArtifacts`, `getPlan`,
+`addPlan`, `recordPlanAdded`, `addSummary`, `getSummary`,
+`getPlanTaskStructure`, `listPhasePlanSummaryPairs`, `findPriorSummary`,
+`findNextIncompletePlan`, `checkPhaseReady`, `roadmapUpdatePlanProgress`,
+`updateRoadmapPhasePlanList`, `phasePlanIndex`.
+
+### IMPL-02: Roadmap/milestone methods (~10)
+
+Per SYNTHESIS.md §4 "Roadmap / Milestone". Includes `getRoadmap`,
+`getRoadmapPhase`, `getRoadmapSection`, `getCurrentMilestone`,
+`getNextMilestone`, `evolveRoadmap`, `updateRoadmapDependencies`,
+`reorganizeRoadmapForMilestone`, `recordBacklogDeferral`,
+`annotateRoadmapDependencies`, `listMilestones`, `listMilestoneArchives`,
+`getArchivedMilestoneRoadmap`, `getArchivedMilestoneDoc`,
+`getMilestoneAudit`, `writeMilestoneAudit`, `addGapClosurePhases`,
+`appendRetrospective`, `getRetrospective`, `getMilestoneStats`,
+`getMilestoneCompletion`, `digestPhaseHistory`.
+
+### IMPL-03: State + decisions/blockers/sessions methods (~10)
+
+Per SYNTHESIS.md §4 "State". Includes `getState`, `getStateField`,
+`getStateSnapshot`, `updateStateField`, `patchStateFields`,
+`recordSession`, `beginPhase`, `advancePlan`, `markPhasePlanned`,
+`switchMilestone`, `signalWaiting`, `clearWaitingSignal`, `validateState`,
+`syncState`, `pruneState`, `updateStateProgress`, `evolveProject`,
+`getProject`, `updateProjectValidatedRequirements`, `getProjectLoad`,
+`getProjectTitle`. (`recordStateEvent` covered by PRIM-02.)
+
+### IMPL-04: Verify/UAT/validation/patterns/security/reviews methods (~25)
+
+Per SYNTHESIS.md §4 "Verify / Check / UAT / Validation / Patterns / Security / Reviews".
+Includes `getVerification`, `getVerificationStatus`, `recordVerification`,
+`listVerificationsAcrossPhases`, `getUat`, `listActiveUat`,
+`listOutstandingUat`, `createUat`, `updateUat`, `updateUatGap`,
+`updateUatStatus`, `updateUatGapDiagnoses`, `getValidation`,
+`recordValidation`, `appendValidationAudit`, `recordPatterns`,
+`getSecurity`, `putSecurity`, `updateSecurityAuditTrail`,
+`getThreatRegister`, `getReview`, `addReview`, `getReviewFix`,
+`addReviewFix`, `archiveReviewIteration`, `getUiSpec`, `addUiSpec`,
+`getUiReview`, `addUiReview`, `addUiReviewScreenshot`, `getEvalReview`,
+`addEvalReview`, `getAiSpec`, `putAiSpec`, `getAiSpecTemplate`,
+`validateAiSpec`, `updateAiSpecSection`, `getReviews`, `addReviews`,
+`recordDocVerification`, `verifyPlanArtifacts`, `verifySummary`,
+`checkDecisionCoveragePlan`, `checkDecisionCoverageVerify`,
+`getPhaseCompletion`, `listSafetyGates`, `routeNextAction`,
+`detectPhaseType`, `getAutoMode`, `getConfigGates`.
+
+### IMPL-05: Discuss/spec/research/discovery/explore methods (~10)
+
+Per SYNTHESIS.md §4 "Discuss / Spec / Research / Discovery / Explore".
+Includes `getContext`, `putContext`, `updatePhaseContext`, `getSpec`,
+`putSpec`, `getResearch`, `writeResearch`, `getDiscovery`, `putDiscovery`,
+`putDiscussionLog`, `getCheckpoint`, `putCheckpoint`, `removeCheckpoint`,
+`putQuestionsState`, `getQuestionsState`, `putQuestionsCompanion`,
+`getMethodology`, `getDecisionsIndex`, `listPriorPhaseContexts`,
+`listPhaseDecisions`, `getDecisions`. (`recordDecision` folds into
+`recordStateEvent({type:'decision'})` per PRIM-02.)
+
+### IMPL-06: Todos/notes/seeds/memory/handoff methods (~12)
+
+Per SYNTHESIS.md §4 "Todos / Notes / Seeds / Memory / Handoff".
+Includes `listTodos`, `getTodo`, `addTodo`, `completeTodo`,
+`closeTodosByResolvesPhase`, `findNextTodoId`, `tagTodoResolvesPhase`,
+`listNotes`, `addNote`, `markNotePromoted`, `findRelatedTodos`,
+`addSeed`, `listSeeds`, `getSeed`, `findNextSeedId`, `getHandoff`,
+`putHandoff`, `removeHandoff`, `listOrphanedHandoffs`, `getContinueHere`,
+`putContinueHere`, `findContinueHere`, `listMemoryEntries`,
+`findDeferredScopeRefs`, `findPlaceholderSummaries`,
+`detectActiveContext`, `listIncompletePlans`.
+
+### IMPL-07: Workstream/workspace/config/skill methods (~6)
+
+Per SYNTHESIS.md §4 "Workstream / Workspace / Config / Skill manifest".
+Includes `getActiveWorkstream`, `listWorkstreams`, `createWorkstream`,
+`setActiveWorkstream`, `getWorkstreamStatus`, `archiveWorkstream`,
+`listWorkstreamProgress`, `createWorkspaceShell`, `removeWorkspaceShell`,
+`getConfig`, `updateConfig`, `ensureConfigSection`, `createInitialConfig`,
+`updateModelProfile`, `getConfigPath`, `writeSkillManifest`,
+`listProjectSkills`, `getDocsInitContext`.
+
+### IMPL-08: Spike/sketch/codebase/intel/learnings methods (~10)
+
+Per SYNTHESIS.md §4 "Spike / Sketch / Codebase-doc / Intel-doc / Learnings".
+Includes `addSpike`, `listSpikes`, `getSpike`, `getSpikeManifest`,
+`updateSpikeManifest`, `getSpikeConventions`, `updateSpikeConventions`,
+`recordSpikeResult`, `addSpikeRequirement`, `recordSpikeWrapUp`,
+`markSpikeProcessed`, mirror set for sketches (`addSketch`, `listSketches`,
+`getSketchManifest`, `updateSketchManifest`, `recordSketchWinner`,
+`recordSketchWrapUp`, `markSketchProcessed`, `getSketchTheme`,
+`putSketchTheme`, `putSketchAsset`), `putCodebaseDoc`, `getCodebaseDoc`,
+`listCodebaseDocs`, `addCodebaseDoc`, `putIntelDoc`, `getIntelDoc`,
+`getIntelStatus`, `getIntelDiff`, `snapshotIntel`, `validateIntel`,
+`queryIntel`, `patchIntelMeta`, `recordIntelSnapshot`, `recordLearnings`,
+`markGraduated`, `listLearningSections`.
+
+### IMPL-09: Debug subsystem methods (~8)
+
+Per SYNTHESIS.md §4 "Debug subsystem". Includes `listDebugSessions`,
+`getDebugSession`, `addDebugSession`, `updateDebugSession` (heavy:
+section-scoped semantics — overwrite Current Focus, append Evidence,
+append Eliminated, immutable Symptoms, overwrite Resolution),
+`archiveDebugSession`, `getDebugKnowledgeBase`,
+`appendDebugKnowledgeBase`, `appendDebugSpecialistReview`.
+
+### IMPL-10: Reports/forensics/dependency-analysis/sidecar methods (~10)
+
+Per SYNTHESIS.md §4 "Reports / Forensics / Inbox", "Dependency analysis /
+undo", "Sidecar / counter". Includes `addForensicReport`,
+`listSessionReports`, `putSessionReport`, `writeInboxTriageReport`,
+`putReport`, `getPhaseManifest`, `findDependentPhases`,
+`findIntraPhasePlanDependencies`, `getNextCallCount`,
+`incrementNextCallCount`, `recordTempArtifact`, `getTempArtifact`.
+
+### IMPL-11: Doc ingestion + templates + commit methods (~6)
+
+Per SYNTHESIS.md §4 "Doc ingestion (Batch 2)" and "Templates / Commit".
+Includes `writeDocClassification`, `listDocClassifications`,
+`writeIntel` (folds into `putIntelDoc`), `writeIngestConflicts`,
+`getIngestConflicts`, `bootstrapFromGsd2`, `selectPhaseTemplate`,
+`fillTemplate`, `commitPlanningState` (no-op for beads per CAP-01),
+`commitToSubrepo`, `checkCommitReady`.
+
+### IMPL-12: Workflow init bundlers (~13)
+
+Per SYNTHESIS.md §4 "Workflow init bundlers". Includes
+`getExecutePhaseInit`, `getPlanPhaseInit`, `getNewMilestoneInit`,
+`getQuickInit`, `getResumeInit`, `getVerifyWorkInit`, `getPhaseOpInit`,
+`getMilestoneOpInit`, `getMapCodebaseInit`, `getNewProjectInit`,
+`getProgressInit`, `getManagerInit`, `getProjectExistence`.
+
+## Test infrastructure
+
+### TEST-01: Carry-forward fixture-based tests pass post-relocation
+
+After `src/` move:
+- `tests/shadow-tests/bd-helper.test.mjs` (renamed if needed; tests `src/bd/helper.mjs`)
+- `tests/shadow-tests/beads-errors.test.mjs` (renamed if needed; tests `src/bd/errors.mjs`)
+- `tests/shadow-tests/findBeadsRoot.test.mjs` (renamed if needed; tests `src/bd/findRoot.mjs`)
+- `tests/fixtures/seed.jsonl` reproduces byte-identically via existing `build-seed.sh`
+- Shadow-specific tests (`handler-*.test.mjs`, `_parity-helpers.test.mjs`, etc.) move to `archive/v0.2-shadow/tests/`
+
+### CONF-01: Conformance test scaffolding
+
+`tests/conformance/` directory holds adapter-shape tests that any
+StorageAdapter must pass. Tests are runnable against BeadsAdapter
+standalone (using `tests/fixtures/seed.jsonl`); cross-adapter parity
+runs against fork's MarkdownAdapter when available.
+
+### CONF-02: Round-trip property tests for `src/format/phase.mjs`
+
+Property tests verify `parsePhaseTitle(formatPhaseTitle(x)) === x`
+and `parsePhaseDescription(formatPhaseDescription(x)) === x` for all
+canonical inputs (single-line goals, multi-line success criteria,
+empty values, edge cases per ARCH-03 spec).
+
+### CONF-03: bd determinism contract preserved
+
+`tests/fixtures/seed.jsonl` byte-identity holds across reseeds with
+`BEADS_ACTOR=seed`. Carry-forward from v0.2 determinism contract.
+
+## Acceptance criteria (gate v1.0 ship)
+
+- ~75 BeadsAdapter methods implemented per SYNTHESIS.md §4 (Bin A,
+  foundational primitives, all Bin B clusters)
+- `BeadsAdapter.capabilities` reflects implementation reality
+- All carry-forward tests pass against new `src/` paths
+- Conformance test suite passes for BeadsAdapter standalone
+- Round-trip property tests for `src/format/phase.mjs` pass
+- v0.2 shadow code archived (no active references)
+- `package.json`, README, CLAUDE.md describe v1.0 architecture
+- Working tree clean; tagged `v1.0-complete`
+
+**Minimum-viable ship gate (if fork interface still in flux at v1.0):**
+- All Bin A primitives + 6 foundational primitives implemented
+- IMPL-01..04 (phase/plan/roadmap/state/verify) complete — high-frequency
+  paths
+- Other Bin B clusters (IMPL-05..12) MAY ship in v1.1 if blocked by
+  unresolved fork-interface questions
+- Documented in v1.0 release notes
+
+## Out of scope (deferred to v1.1+)
+
+- Migration tooling (markdown → bd) — depends on stable fork interface
+- Multi-bead transactional semantics (`transaction: false` per CAP-01)
+- Binary asset write path (`binaryAsset: false` per CAP-01) — sketch
+  HTML/CSS, UI screenshots get external blob store or error
+- `commitPlanningState` semantics resolution (OQ-01 in SYNTHESIS.md §6)
+- Knowledge-graph subsystem support (separate `GraphAdapter` per OQ-06)
+- 2 raw-git outliers fix (OQ-03; fork-side concern)
+- `<context>`-block leak mitigation (OQ-04; fork-side concern)
 
 ## Traceability
 
-### Milestone v0.3 — Adapter prep
+### Milestone v1.0 — BeadsAdapter
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEAN-01 | (TBD by roadmapper) | Pending |
-| CLEAN-02 | (TBD by roadmapper) | Pending |
-| CLEAN-03 | (TBD by roadmapper) | Pending |
-| CLEAN-04 | (TBD by roadmapper) | Pending |
-| ARCH-01 | (TBD by roadmapper) | Pending |
-| ARCH-02 | (TBD by roadmapper) | Pending |
-| ARCH-03 | (TBD by roadmapper) | Pending |
-| ARCH-04 | (TBD by roadmapper) | Pending |
-| ARCH-05 | (TBD by roadmapper) | Pending |
-| DOC-01 | (TBD by roadmapper) | Pending |
-| DOC-02 | (TBD by roadmapper) | Pending |
+| CLEAN-01..04 | (TBD by roadmapper) | Pending |
+| ARCH-01..05 | (TBD by roadmapper) | Pending |
+| DOC-01..02 | (TBD by roadmapper) | Pending |
+| CAP-01 | (TBD by roadmapper) | Pending |
+| PRIM-01..02 | (TBD by roadmapper) | Pending |
+| IMPL-01..12 | (TBD by roadmapper) | Pending |
 | TEST-01 | (TBD by roadmapper) | Pending |
+| CONF-01..03 | (TBD by roadmapper) | Pending |
 
-**Coverage:** 12/12 v0.3 requirements pending phase assignment.
+**Coverage:** 30 v1.0 requirement entries (CLEAN×4 + ARCH×5 + DOC×2 +
+CAP×1 + PRIM×2 + IMPL×12 + TEST×1 + CONF×3) pending phase assignment.

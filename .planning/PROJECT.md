@@ -15,6 +15,7 @@ storage for any GSD project that opts in via config.
 │  • Default MarkdownAdapter (zero behavior change)           │
 │  • Capabilities flag for adapter feature negotiation        │
 │  • Independent version line (its own v1.0 milestone)        │
+│  • Status: Phase 1 in flight; interface still evolving      │
 └────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────┐
@@ -22,8 +23,9 @@ storage for any GSD project that opts in via config.
 │  • BeadsAdapter — implements StorageAdapter against bd      │
 │  • Carries forward: 13 spike findings, format module,       │
 │    parsing helpers, JSONL roundtrip seed pattern            │
-│  • Depends on the fork (npm peer dep / local symlink)       │
-│  • Independent version line (v0.3 next, then v1.0)          │
+│  • Independent version line (v1.0 in flight)                │
+│  • Implements against SYNTHESIS.md §4 spec; refactors       │
+│    when fork's interface stabilizes                         │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -36,84 +38,64 @@ upstream GSD. If they install gsd-beads and configure
 | Milestone | Status | Scope |
 |-----------|--------|-------|
 | v0.1 | complete | Spike + initial layer + cross-worktree validation |
-| v0.2 | **superseded** | "Beads-backed reads" via shadow — abandoned 2026-04-30 after architectural investigation found shadow architecture has a hard ceiling |
-| **v0.3** | **next** | **Adapter prep** — archive shadow code, restructure as adapter library, set up package layout. No fork dependency. |
-| v1.0 | future | BeadsAdapter implementation against fork's StorageAdapter interface (waits for fork's Phase 1 to ship) |
+| v0.2 | superseded | "Beads-backed reads" via shadow — abandoned 2026-04-30 after architectural investigation found shadow has hard ceiling |
+| **v1.0** | **in flight** | **BeadsAdapter implementation** — full scope per SYNTHESIS.md §4 (~75 methods); cleanup + scaffolding folded in. Implements in parallel with fork's interface evolution; refactors when fork's contract stabilizes. |
 
-## Current Milestone: v0.3 — Adapter prep
+## Current Milestone: v1.0 — BeadsAdapter
 
-**Status:** ready to declare via `/gsd-new-milestone`
+**Status:** scoped; ready for `/gsd-discuss-phase 6` and `/gsd-plan-phase 6`
 
-**Goal:** Clean up the v0.2 shadow architecture; restructure this repo as
-a proper adapter library scaffold; preserve carry-forward primitives.
-Independent of fork progress — pure cleanup + scaffolding work.
+**Goal:** Ship a `BeadsAdapter` package that implements the full
+StorageAdapter contract (per SYNTHESIS.md §4) against `bd` as the storage
+backend. Includes cleanup of v0.2 shadow architecture, restructure as
+adapter library, and end-to-end implementation of all ~75 adapter methods.
 
-**Why this milestone exists:** the v0.2 shadow architecture was abandoned
-when the architectural investigation (`.planning/research/fork-investigation/SYNTHESIS.md`)
-revealed the shadow can't reach all of GSD's I/O surface. The shadow code
-is now dead weight obscuring what this repo is becoming. We need to clean
-it up and prep the directory structure before the fork's Phase 1 ships
-the StorageAdapter interface that v1.0 will implement against.
+**Why now (not after fork's Phase 1 ships):** SYNTHESIS.md §4 is a
+credible interface spec derived from a 258-artifact investigation.
+Implementing against it in parallel surfaces design friction that
+informs the fork's interface evolution. Acceptable cost: 10-30% refactor
+when the fork's contract stabilizes.
 
-**Scope (single phase):**
-- **Archive shadow code** to `archive/v0.2-shadow/`:
-  `bin/gsd-sdk-shadow.mjs`, `bin/wrap-mutation.mjs`,
-  `hooks/block-gsd-sdk-mutation.sh`, `hooks/block-state-md.sh`, most of
-  `hooks/bd-sync.sh`, `scripts/regen-roadmap.sh`,
-  `scripts/regen-requirements.sh`
-- **Carry-forward primitives** moved into `src/` layout:
-  - `src/bd/helper.mjs` ← from `bin/bd-helper.mjs`
-  - `src/bd/errors.mjs` ← from `bin/beads-errors.mjs`
-  - `src/bd/findRoot.mjs` ← extracted from shadow's `findBeadsRoot`
-  - `src/format/phase.mjs` ← phase-format module concept (parse/format pair)
-  - `src/helpers/parsePhaseId.mjs` ← from shadow
-  - `src/helpers/deriveDiskStatus.mjs` ← from shadow
-  - `src/helpers/loadMilestoneHeading.mjs` ← from shadow
-  - `src/adapter.mjs` ← BeadsAdapter placeholder (throws "not implemented")
-- **Package config rewrite:** `package.json` updated to reflect adapter
-  library shape (exports map, no bin entries, peer dep on fork)
-- **Install script rewrite:** `install.sh` removed or repurposed (no more
-  global hook installation — this is now an npm package, not a system
-  layer)
-- **README + CLAUDE.md update:** reflect post-cleanup architecture
-- **Tests preserved:** `tests/fixtures/` stays as canonical fixtures;
-  `tests/shadow-tests/` half-archived (parity helpers refactored later
-  when v1.0's conformance suite gets set up)
+**Target features (organized by SYNTHESIS.md §4 clusters):**
+- Cleanup + scaffolding: archive v0.2 shadow code; restructure as
+  adapter library (`src/` layout); package config; documentation
+- Bin A generic CRUD primitives (~10 methods): `getRecord`, `putRecord`,
+  `listCollection`, `getSection`, `updateSection`,
+  `getFrontmatter`/`updateFrontmatter`/`mergeFrontmatter`, etc.
+- Foundational primitives (~6 methods): `recordStateEvent` (discriminated
+  union), `snapshot/restore` (or `withTransaction`), `putNamedDoc`,
+  `writeBinaryAsset`
+- Bin B named domain methods (~58):
+  - Phase/plan lifecycle (~15)
+  - Roadmap/milestone (~10)
+  - State (~10)
+  - Verify/UAT/Validation/Patterns/Security/Reviews (~15)
+  - Discuss/Spec/Research (~5)
+  - Todos/Notes/Seeds/Memory/Handoff (~10)
+  - Workstream/Workspace/Config/Skill (~6)
+  - Spike/Sketch/Codebase/Intel/Learnings (~10)
+  - Debug subsystem (~5)
+  - Reports/Forensics/Inbox (~3)
+  - Doc ingestion (~3)
+  - Templates/Commit (~3)
+  - Sidecar/Counter (~3)
+- Capabilities flag declaring supported features (per D-2026-04-30-05)
+- Conformance test scaffolding — runs against bd fixtures; will pair
+  with fork's MarkdownAdapter at v1.0 ship for cross-adapter parity tests
 
-**Success criteria:**
-- No active code under `bin/` (all archived or moved to `src/`)
-- All shadow hooks archived; nothing self-installs into `~/.claude/`
-- `tests/fixtures/seed.jsonl` still produces byte-identical output
-  via existing tests
-- PROJECT.md / STATE.md / CLAUDE.md describe post-cleanup state
-- Working tree clean; tagged `v0.3-complete`
+**Phase scope (preliminary; gsd-roadmapper refines):**
+| # | Phase | Brief |
+|---|-------|-------|
+| 6 | Cleanup + scaffolding | Archive v0.2 shadow code; src/ layout; package.json; docs |
+| 7 | Bin A primitives + foundational primitives | Wire ~16 primitive methods; conformance scaffolding |
+| 8 | Phase/plan/roadmap/milestone domain methods | ~25 methods; high-frequency paths |
+| 9 | State + decision + event domain methods | ~10 methods; recordStateEvent discriminated union |
+| 10 | Verify/check/UAT/validation/reviews domain methods | ~15 methods |
+| 11 | Discuss/spec/research/todos/seeds/handoff domain methods | ~15 methods |
+| 12 | Workstream/spike/sketch/intel/codebase/debug/misc domain methods | ~15 methods |
+| 13 | Conformance test suite + fork-link integration + docs | parity vs fork's MarkdownAdapter once available |
 
-**What this milestone does NOT do:**
-- Implement BeadsAdapter — that's v1.0, gated on fork's Phase 1
-- Modify the carry-forward helpers' logic — pure relocation + minor
-  refactor for the new module shape
-- Delete spike findings, decisions, or research docs (all preserved)
-
-## v1.0 milestone (future, after fork Phase 1 ships)
-
-**Goal:** Ship a `BeadsAdapter` that implements the full StorageAdapter
-contract defined by the fork, passes the conformance test suite, and
-ships as a working alternative storage backend for GSD users.
-
-**Sub-phases (preliminary, refined when fork interface stabilizes):**
-1. Phase 1.x: Wire BeadsAdapter against the fork's Bin A primitives
-   (`getRecord`, `putRecord`, `getSection`, `updateSection`, etc.)
-2. Phase 1.x: Wire Bin B named methods (phase/plan, roadmap/milestone,
-   state, verify, etc.) — leverages bd schema-aware encoding
-3. Phase 1.x: Wire foundational primitives (`recordStateEvent`
-   discriminated union, `snapshot/restore`, `putNamedDoc`,
-   `writeBinaryAsset`)
-4. Phase 1.x: Conformance test suite passing against MarkdownAdapter
-   parity baseline
-5. Phase 1.x: Migration tooling (markdown → bd)
-
-Phases get refined when the fork's interface ships and we know the exact
-contract to implement against.
+(roadmapper may consolidate; phase numbers continue from v0.2's last shipped)
 
 ## Why this exists (the core motivation)
 
@@ -149,14 +131,16 @@ Single developer + Claude Code agents. Other adapters welcome — anyone
 can write a `SqliteAdapter`, `PostgresAdapter`, `RestAdapter` against the
 same fork interface.
 
-## Success criteria (project-level, beyond v0.3)
+## Success criteria (project-level)
 
 - A user can install the fork with `npm install -g <fork>` and get GSD
-  with no behavior change
+  with no behavior change (fork's responsibility)
 - Adding `gsd-beads` and `storage.adapter: beads` switches all state to bd
+- All ~75 BeadsAdapter methods implemented against SYNTHESIS.md §4 spec
+- Conformance test suite passes for BeadsAdapter (paired with fork's
+  MarkdownAdapter when fork ships)
 - Two git worktrees of the same project see the same workflow state
-- Conformance test suite passes for both adapters
-- Existing GSD users have a migration path (markdown → bd)
+- Existing GSD users have a migration path (markdown → bd; v1.0 ship gate)
 
 ## Non-goals
 
@@ -169,12 +153,14 @@ same fork interface.
   the bd adapter is active (markdown views are regenerated on demand)
 - Backwards compatibility with v0.1/v0.2 shadow installations (clean break;
   v0.2 work archived under `archive/v0.2-shadow/` as historical reference)
+- 100% method coverage at v1.0 ship if fork's interface is still in flux —
+  a "minimum viable BeadsAdapter" gate may apply (Bin A + foundational +
+  most-used Bin B); rare Bin B methods can land in v1.1
 
 ## Carry-forward from v0.1 and v0.2 work
 
-These artifacts translate directly into the BeadsAdapter implementation
-(v1.0). v0.3 reorganizes them into the new `src/` layout but doesn't
-change their logic.
+These artifacts translate directly into BeadsAdapter implementation. v1.0
+relocates them into the new `src/` layout and wires them into the adapter.
 
 - **13 spike findings** — auto-loaded via `Skill("spike-findings-gsd-beads")`
   - especially Spike 002 (beads modeling), 003 (cross-worktree),
@@ -184,18 +170,16 @@ change their logic.
   `version:vX.Y` label patterns
 - **Memory-key patterns** — `gsd-beads:milestone:vX.Y:heading`; the
   forget-sync caveat documented in spike findings
-- **Helpers** (relocated to `src/helpers/` in v0.3) — `parsePhaseId()`,
+- **Helpers** (relocate to `src/helpers/`) — `parsePhaseId()`,
   `deriveDiskStatus()`, `detectDrift()`, `loadMilestoneHeading()`
-- **bd CLI wrapping** (relocated to `src/bd/` in v0.3) — `bd-helper.mjs`,
+- **bd CLI wrapping** (relocate to `src/bd/`) — `bd-helper.mjs`,
   `beads-errors.mjs`, `findBeadsRoot()`
 - **Test infrastructure** — `tests/fixtures/seed.jsonl`,
   `tests/fixtures/build-seed.sh`, `tests/fixtures/seed-fixture.sh`,
-  `tests/shadow-tests/_parity-helpers.mjs` (refactored for conformance
-  testing during v1.0)
+  `tests/shadow-tests/_parity-helpers.mjs`
 - **Format module concept** — bidirectional `parsePhase{Title,Description}` /
-  `formatPhase{Title,Description}` round-trip pair (lands in
-  `src/format/phase.mjs` during v0.3 as a placeholder; logic written
-  in v1.0)
+  `formatPhase{Title,Description}` round-trip pair (becomes
+  `src/format/phase.mjs` with real implementation in v1.0)
 - **Cascade-loop pattern** — `bd epic close-eligible` 5-line idempotent
   loop
 - **Determinism contract** — `bd init --from-jsonl` byte-identity with
@@ -218,8 +202,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-04-30 — v0.3 milestone scoped (adapter prep).
-v1.0 (BeadsAdapter implementation) deferred until fork ships StorageAdapter
-interface.*
+*Last updated: 2026-04-30 — v1.0 (BeadsAdapter) milestone scoped; full
+implementation scope adopted in parallel with fork interface evolution.*
 *Decision log: `.planning/DECISIONS.md`. Investigation input:
 `.planning/research/fork-investigation/SYNTHESIS.md`.*
