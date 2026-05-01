@@ -623,14 +623,14 @@ empty values, edge cases per ARCH-03 spec).
 | CLEAN-02 (obsolete hooks archived) | Phase 6 | Complete |
 | CLEAN-03 (obsolete regen scripts archived) | Phase 6 | Complete |
 | CLEAN-04 (install script removed) | Phase 6 | Complete |
-| ARCH-01 (`src/bd/`) | Phase 6 | Pending |
-| ARCH-02 (`src/helpers/`) | Phase 6 | Pending |
-| ARCH-03 (`src/format/phase.mjs`) | Phase 6 | Pending |
+| ARCH-01 (`src/bd/`) | Phase 6 | Complete |
+| ARCH-02 (`src/helpers/`) | Phase 6 | Complete |
+| ARCH-03 (`src/format/phase.mjs`) | Phase 6 | Complete |
 | ARCH-04 (`src/adapter.mjs` BeadsAdapter class) | Phase 6 | Complete |
 | ARCH-05 (`package.json` rewrite) | Phase 6 | Complete |
 | DOC-01 (README.md) | Phase 6 | Complete |
 | DOC-02 (CLAUDE.md) | Phase 6 | Complete |
-| TEST-01 (carry-forward fixture tests) | Phase 6 | Pending |
+| TEST-01 (carry-forward fixture tests) | Phase 6 | Complete |
 | CAP-01 (capabilities flag) | Phase 7 | Pending |
 | PRIM-01 (Bin A generic CRUD) | Phase 7 | Pending |
 | PRIM-02 (6 foundational primitives) | Phase 7 | Pending |
