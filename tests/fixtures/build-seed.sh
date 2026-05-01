@@ -94,6 +94,31 @@ BEADS_ACTOR=seed bd label add "$P32" version:v0.3 >/dev/null
 BEADS_ACTOR=seed bd label add "$P32" phase-id:11 >/dev/null
 
 # ---------------------------------------------------------------------------
+# Milestone beads (Phase 7 / D-09 COMMENT_EVENT_TYPES dispatch substrate)
+# Foundational primitives' recordStateEvent({type:'session', ...}) etc.
+# require a bd issue with labels gsd:milestone + version:<v> as the comment
+# carrier. One milestone bead per version (additive — does not affect
+# phase counts or summary counts in existing tests).
+# ---------------------------------------------------------------------------
+M01=$(BEADS_ACTOR=seed bd q "Milestone v0.1: Foundation" -t epic -p 2)
+BEADS_ACTOR=seed bd label add "$M01" gsd:milestone >/dev/null
+BEADS_ACTOR=seed bd label add "$M01" version:v0.1 >/dev/null
+BEADS_ACTOR=seed bd close "$M01" >/dev/null
+
+M02=$(BEADS_ACTOR=seed bd q "Milestone v0.2: Beads-backed reads" -t epic -p 2)
+BEADS_ACTOR=seed bd label add "$M02" gsd:milestone >/dev/null
+BEADS_ACTOR=seed bd label add "$M02" version:v0.2 >/dev/null
+BEADS_ACTOR=seed bd close "$M02" >/dev/null
+
+M03=$(BEADS_ACTOR=seed bd q "Milestone v0.3: Adapter scaffolding" -t epic -p 2)
+BEADS_ACTOR=seed bd label add "$M03" gsd:milestone >/dev/null
+BEADS_ACTOR=seed bd label add "$M03" version:v0.3 >/dev/null
+
+M10=$(BEADS_ACTOR=seed bd q "Milestone v1.0: BeadsAdapter" -t epic -p 1)
+BEADS_ACTOR=seed bd label add "$M10" gsd:milestone >/dev/null
+BEADS_ACTOR=seed bd label add "$M10" version:v1.0 >/dev/null
+
+# ---------------------------------------------------------------------------
 # Plan children for v0.2 phases (D-03 substrate; SC #2 count parity)
 # 24 plans distributed: P21=4, P22=5, P23=4, P24=3, P25=3, P26=3, P27=2
 #
@@ -154,3 +179,4 @@ echo "[build-seed] seed.jsonl regenerated at $REPO_ROOT/tests/fixtures/seed.json
 echo "[build-seed] IDs: P11=$P11 P12=$P12 P21=$P21 P22=$P22 P23=$P23 P31=$P31 P32=$P32"
 echo "[build-seed] New v0.2: P24=$P24 P25=$P25 P26=$P26 P27=$P27"
 echo "[build-seed] Phase-ids: 01(P11) 02(P12) 03(P21) 04(P22) 05(P23) 06(P24) 07(P25) 08(P26) 09(P27) 10(P31) 11(P32)"
+echo "[build-seed] Milestones: M01(v0.1) M02(v0.2) M03(v0.3) M10(v1.0)"
