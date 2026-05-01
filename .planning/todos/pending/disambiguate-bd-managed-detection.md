@@ -2,12 +2,22 @@
 created: 2026-04-29
 title: Disambiguate "bd-managed project" detection from "project hosts bd vocabulary"
 area: shadow, hooks
+resolves_phase: 6
 files:
   - bin/gsd-sdk-shadow.mjs
   - hooks/block-state-md.sh
   - hooks/block-gsd-sdk-mutation.sh
   - hooks/bd-sync.sh
 ---
+
+> **Resolution note (2026-04-30):** v1.0 Phase 6 archives the shadow code
+> and all three offending hooks (`block-state-md.sh`,
+> `block-gsd-sdk-mutation.sh`, `bd-sync.sh`) into `archive/v0.2-shadow/`,
+> which makes this self-targeting issue moot in this repo. The conceptual
+> disambiguation work — "bd-managed project" vs "project hosts bd
+> vocabulary" — moves to the BeadsAdapter `init()` step (CAP-01 / Phase 7),
+> where the adapter validates bd state and gracefully degrades when no
+> bd-tracked issues exist. Closing once Phase 6 ships.
 
 ## Problem
 
