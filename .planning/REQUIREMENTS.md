@@ -624,7 +624,7 @@ empty values, edge cases per ARCH-03 spec).
 | ARCH-01 (`src/bd/`) | Phase 6 | Pending |
 | ARCH-02 (`src/helpers/`) | Phase 6 | Pending |
 | ARCH-03 (`src/format/phase.mjs`) | Phase 6 | Pending |
-| ARCH-04 (`src/adapter.mjs` BeadsAdapter class) | Phase 6 | Pending |
+| ARCH-04 (`src/adapter.mjs` BeadsAdapter class) | Phase 6 | Complete |
 | ARCH-05 (`package.json` rewrite) | Phase 6 | Pending |
 | DOC-01 (README.md) | Phase 6 | Pending |
 | DOC-02 (CLAUDE.md) | Phase 6 | Pending |
