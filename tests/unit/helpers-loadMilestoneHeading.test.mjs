@@ -1,11 +1,11 @@
-// tests/shadow-tests/helpers-loadMilestoneHeading.test.mjs
+// tests/unit/helpers-loadMilestoneHeading.test.mjs
 // Unit tests for loadMilestoneHeading helper (D-15..D-17).
 // Wave 0 RED stubs — fail until loadMilestoneHeading is exported from gsd-sdk-shadow.mjs.
 // 4 cases: memory hit, missing memory fallback (stderr note), unrelated key fallback, idempotency.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadMilestoneHeading } from '../../bin/gsd-sdk-shadow.mjs';
+import { loadMilestoneHeading } from '../../src/helpers/loadMilestoneHeading.mjs';
 
 // CASE 1: memory hit — key present in memories → returns formatted heading
 test('CASE 1: loadMilestoneHeading — returns formatted heading when memory key present', () => {

@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bd } from '../../bin/bd-helper.mjs';
-import { BeadsNotInstalled, BeadsCorrupt, BeadsUnavailableError } from '../../bin/beads-errors.mjs';
+import { bd } from '../../src/bd/helper.mjs';
+import { BeadsNotInstalled, BeadsCorrupt, BeadsUnavailableError } from '../../src/bd/errors.mjs';
 
 /**
  * Run `cb` with a PATH-injected `bd` shim whose body is `scriptBody`.

@@ -7,7 +7,7 @@ import {
   BeadsCorrupt,
   BeadsVersionMismatch,
   BeadsEmpty,
-} from '../../bin/beads-errors.mjs';
+} from '../../src/bd/errors.mjs';
 
 // CASE 1: subtype is instanceof base
 test('CASE 1: BeadsNotInstalled instanceof BeadsUnavailableError', () => {

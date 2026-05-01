@@ -1,4 +1,4 @@
-// tests/shadow-tests/helpers-detectDrift.test.mjs
+// tests/unit/helpers-detectDrift.test.mjs
 // Unit tests for detectDrift helper (D-09/D-10 + refined D-06).
 // Wave 0 RED stubs — fail until detectDrift is exported from gsd-sdk-shadow.mjs.
 // 6 cases: no-drift, plan_count drift, LIVE summary_count divergence (refined D-06),
@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectDrift } from '../../bin/gsd-sdk-shadow.mjs';
+import { detectDrift } from '../../src/helpers/detectDrift.mjs';
 
 // CASE 1: no drift when bd.plan_count === disk.disk_plan_count and all other counts match
 test('CASE 1: detectDrift — returns [] when all counts match (no drift)', () => {

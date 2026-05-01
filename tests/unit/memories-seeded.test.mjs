@@ -1,4 +1,4 @@
-// tests/fixtures/memories-seeded.test.mjs
+// tests/unit/memories-seeded.test.mjs
 // D-18: validates that build-seed.sh seeds milestone-heading memories.
 // D-17 fallback: validates v0.3 memory is deliberately absent.
 //

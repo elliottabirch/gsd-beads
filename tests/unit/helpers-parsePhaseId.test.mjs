@@ -1,11 +1,11 @@
-// tests/shadow-tests/helpers-parsePhaseId.test.mjs
+// tests/unit/helpers-parsePhaseId.test.mjs
 // Unit tests for parsePhaseId helper (D-02).
 // Wave 0 RED stubs — fail until helpers-parsePhaseId is exported from gsd-sdk-shadow.mjs.
 // 6 cases: zero-padded, unpadded, decimal, 3-digit, null/undefined, no-prefix.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePhaseId } from '../../bin/gsd-sdk-shadow.mjs';
+import { parsePhaseId } from '../../src/helpers/parsePhaseId.mjs';
 
 // CASE 1: parsePhaseId strips 'phase-id:' prefix and removes zero-padding
 test('CASE 1: parsePhaseId — zero-padded phase-id:05 → "5"', () => {

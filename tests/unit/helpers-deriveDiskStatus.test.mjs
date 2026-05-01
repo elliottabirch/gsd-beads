@@ -1,11 +1,11 @@
-// tests/shadow-tests/helpers-deriveDiskStatus.test.mjs
+// tests/unit/helpers-deriveDiskStatus.test.mjs
 // Unit tests for deriveDiskStatus helper (D-07).
 // Wave 0 RED stubs — fail until deriveDiskStatus is exported from gsd-sdk-shadow.mjs.
 // 8 cases: one per D-07 priority case + 1 priority-order verification.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveDiskStatus } from '../../bin/gsd-sdk-shadow.mjs';
+import { deriveDiskStatus } from '../../src/helpers/deriveDiskStatus.mjs';
 
 // CASE 1: dirExists=false → 'no_directory' (lowest priority — phase dir absent)
 test('CASE 1: deriveDiskStatus — no_directory when dirExists=false', () => {

@@ -1,4 +1,4 @@
-// tests/shadow-tests/milestone-scoping.test.mjs
+// tests/unit/milestone-scoping.test.mjs
 //
 // Asserts D-05: per-worktree STATE.md scoping. Two worktrees on different
 // milestones (v0.2 vs v0.3) sharing one bd store see DIFFERENT STATE.md
@@ -62,7 +62,7 @@ test('milestone-scoping CASE 1: WT-A milestone v0.2 produces v0.2 STATE.md', (t)
   const { root, wtA } = multiMilestoneFixture();
   t.after(() => rmSync(root, { recursive: true, force: true }));
 
-  execSync(`bash ${REPO_ROOT}/scripts/regen-state.sh`, { cwd: wtA });
+  execSync(`bash ${REPO_ROOT}/archive/v0.2-shadow/scripts/regen-state.sh`, { cwd: wtA });
   const stateA = readFileSync(join(wtA, '.planning/STATE.md'), 'utf-8');
   assert.match(stateA, /v0\.2/, 'WT-A STATE.md should mention v0.2');
   assert.doesNotMatch(stateA, /v0\.3/, 'WT-A STATE.md should NOT mention v0.3');
@@ -72,7 +72,7 @@ test('milestone-scoping CASE 2: WT-B milestone v0.3 produces v0.3 STATE.md', (t)
   const { root, wtB } = multiMilestoneFixture();
   t.after(() => rmSync(root, { recursive: true, force: true }));
 
-  execSync(`bash ${REPO_ROOT}/scripts/regen-state.sh`, { cwd: wtB });
+  execSync(`bash ${REPO_ROOT}/archive/v0.2-shadow/scripts/regen-state.sh`, { cwd: wtB });
   const stateB = readFileSync(join(wtB, '.planning/STATE.md'), 'utf-8');
   assert.match(stateB, /v0\.3/, 'WT-B STATE.md should mention v0.3');
   assert.doesNotMatch(stateB, /v0\.2/, 'WT-B STATE.md should NOT mention v0.2');

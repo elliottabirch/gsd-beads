@@ -1,4 +1,4 @@
-// tests/shadow-tests/findBeadsRoot.test.mjs
+// tests/unit/findBeadsRoot.test.mjs
 // REQ-QUAL-03 — findBeadsRoot worktree-aware root discovery (D-01..D-04).
 // Worktree fixture pattern from RESEARCH §Pattern 5 + tests/cross-worktree/lib/setup.sh.
 // Co-locates src + wt under one tempdir so a single rm -rf cleans both.
@@ -9,7 +9,7 @@ import { execSync } from 'node:child_process';
 import { mkdtempSync, rmSync, mkdirSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findBeadsRoot } from '../../bin/gsd-sdk-shadow.mjs';
+import { findBeadsRoot } from '../../src/bd/findRoot.mjs';
 
 function worktreeBeadsFixture() {
   // Co-locate src + wt under one tempdir (avoids orphan refs in
