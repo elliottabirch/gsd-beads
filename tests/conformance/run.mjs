@@ -2,7 +2,7 @@
 // Driver: invokes each conformance file's runConformance with concrete
 // adapter factories.
 //
-// Wave-progressive FILES list — Plans 09/10 add binA-* and foundational-*.
+// FILES list complete for Phase 7: capabilities + 3 binA + 3 foundational.
 // Per D-14, this driver is the spine; each conformance file exports
 // runConformance(makeAdapter, label) and does NOT auto-register at the
 // top level when GSD_CONFORMANCE_AUTORUN=0 (set below before imports).
@@ -23,7 +23,9 @@ const FILES = [
   './binA-records.test.mjs',
   './binA-section.test.mjs',
   './binA-frontmatter.test.mjs',
-  // Plan 10 adds: './foundational-events.test.mjs', './foundational-namedDoc.test.mjs', './foundational-snapshot.test.mjs'
+  './foundational-events.test.mjs',
+  './foundational-namedDoc.test.mjs',
+  './foundational-snapshot.test.mjs',
 ];
 
 const factories = [
