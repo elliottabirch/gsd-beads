@@ -9,8 +9,12 @@
 // BEADS_ACTOR=seed on every bd call that affects committed state (D-20).
 // Heading line itself NEVER touched in updateSection (D-07; Plan 05 owns).
 
-import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
-import { resolve as pathResolve } from 'node:path';
+import {
+  existsSync, readFileSync, readdirSync, unlinkSync,
+  mkdtempSync, mkdirSync, copyFileSync, chmodSync,
+} from 'node:fs';
+import { resolve as pathResolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { resolve as routerResolve } from './pathRouter.mjs';
 import { atomicWriteFile } from './_atomicWrite.mjs';
 import { locateSection, rewriteSection } from '../format/section.mjs';
@@ -386,8 +390,79 @@ export default {
     throw new Error(`recordStateEvent: unknown type "${type}"`);
   },
 
-  async snapshot()                            { NOT_IMPLEMENTED('snapshot', 7, 'PRIM-02'); },
-  async restore(snapshotRef)                  { NOT_IMPLEMENTED('restore', 7, 'PRIM-02'); },
+  /**
+   * Snapshot the bd database to a JSONL file in a fresh tmp dir.
+   *
+   * Behavior per RESEARCH §Pattern 5 + Pitfall 3 + Pitfall 4:
+   * - bd v1.0.3 `bd export --json` includes memories by default (no
+   *   `--memories` flag exists; use `--no-memories` to exclude — Pitfall 3).
+   * - Output goes to a real tmp file; `/dev/null` errors with fsync (Pitfall 4).
+   * - Caller owns the lifecycle of the returned tmp dir/file (cleanup is
+   *   theirs); accepts `T-7-17` per the plan threat model.
+   *
+   * Single bd spawn — within QUAL-07 budget. `cwd: this._beadsRoot` per
+   * the deferred-items.md cwd-pass pattern established in Plan 06.
+   */
+  async snapshot() {
+    this._ensureBd();
+    const dir = mkdtempSync(join(tmpdir(), 'gsd-beads-snap-'));
+    const path = join(dir, 'snapshot.jsonl');
+    bd(['export', '--json', '-o', path], {
+      cwd: this._beadsRoot,
+      env: { ...process.env, BEADS_ACTOR: 'seed' },
+      parseJson: false,
+    });
+    return path;
+  },
+
+  /**
+   * Restore a fresh bd store in a new tmp dir from a JSONL snapshot.
+   *
+   * Behavior per RESEARCH §Pattern 5 + Pitfall 6:
+   * - Validates snapshotRef is a non-empty string + that the file exists
+   *   (T-7-02 mitigation: surfaces malformed JSONL as BeadsCorrupt via the
+   *   bd helper's stderr inspection).
+   * - Spawns `git init` in the tmp dir so `bd init` checks pass.
+   * - Hardcodes prefix 'sd' (matches build-seed.sh / fixtures); a future
+   *   plan derives prefix dynamically from the snapshot's issue ids.
+   * - chmodSync 0o700 on .beads (Pitfall 6: bd nags on every subsequent
+   *   invocation against modes wider than 0o700).
+   * - 2 spawns: git init + bd init.
+   *
+   * Returns the tmp project root path.
+   */
+  async restore(snapshotRef) {
+    if (typeof snapshotRef !== 'string' || !snapshotRef.length) {
+      throw new TypeError('restore: snapshotRef must be a non-empty path string');
+    }
+    if (!existsSync(snapshotRef)) {
+      throw new Error(`restore: snapshot file does not exist: ${snapshotRef}`);
+    }
+    const dir = mkdtempSync(join(tmpdir(), 'gsd-beads-restore-'));
+    // Use spawnSync directly for git init (the bd() helper is bd-specific).
+    const { spawnSync } = await import('node:child_process');
+    const gitInit = spawnSync('git', ['init', '-q'], { cwd: dir, stdio: 'ignore' });
+    if (gitInit.status !== 0) {
+      throw new Error(`restore: git init failed in ${dir}`);
+    }
+    mkdirSync(join(dir, '.beads'), { recursive: true });
+    copyFileSync(snapshotRef, join(dir, '.beads/issues.jsonl'));
+    bd(
+      [
+        'init', '--from-jsonl',
+        '--prefix', 'sd',
+        '--non-interactive', '--skip-agents', '--skip-hooks', '--quiet',
+      ],
+      {
+        cwd: dir,
+        env: { ...process.env, BEADS_ACTOR: 'seed' },
+        parseJson: false,
+      },
+    );
+    // Pitfall 6: bd warns on .beads != 0700 on every subsequent invocation
+    chmodSync(join(dir, '.beads'), 0o700);
+    return dir;
+  },
   async putNamedDoc(category, key, body)      { NOT_IMPLEMENTED('putNamedDoc', 7, 'PRIM-02'); },
   async getNamedDoc(category, key)            { NOT_IMPLEMENTED('getNamedDoc', 7, 'PRIM-02'); },
 

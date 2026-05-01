@@ -40,7 +40,10 @@ test('ARCH-04: stub methods throw canonical message format', async () => {
 
   // Spot-check one method from each of the 8 cluster files.
   const samples = [
-    ['snapshot'],                         // primitives (Phase 7 Plan 04+05 implemented Bin A; snapshot is still-stubbed PRIM-02 work for Plan 06/07)
+    // primitives cluster: no sentinel — Phase 7 (Plans 04-07) ships every
+    // primitive as a real implementation, so no stubs remain here. The
+    // canonical stub-message contract is exercised via the other 7
+    // cluster samples below.
     ['addPhase', { description: 'x' }],   // phaseLifecycle
     ['getRoadmap'],                       // roadmapMilestone
     ['getStateSnapshot'],                 // state
