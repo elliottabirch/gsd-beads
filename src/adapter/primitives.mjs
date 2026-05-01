@@ -15,7 +15,7 @@ import {
 } from 'node:fs';
 import { resolve as pathResolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { resolve as routerResolve } from './pathRouter.mjs';
+import { resolve as routerResolve, NAMED_DOC_CATEGORIES } from './pathRouter.mjs';
 import { atomicWriteFile } from './_atomicWrite.mjs';
 import { locateSection, rewriteSection } from '../format/section.mjs';
 import {
@@ -49,9 +49,13 @@ const COMMENT_EVENT_TYPES = Object.freeze(new Set([
   'forensic_session',
 ]));
 
-const NOT_IMPLEMENTED = (name, phase, impl) => {
-  throw new Error('BeadsAdapter.' + name + ': not implemented (Phase ' + phase + ' / ' + impl + ')');
-};
+// NOTE: the canonical stub helper that other cluster files still carry was
+// removed at the end of Phase 7 (Plan 07) — every primitive in this file
+// is now a real implementation. The shell-level stub-message contract
+// for the OTHER adapter clusters (phaseLifecycle, roadmapMilestone, ...)
+// is enforced by `tests/unit/adapter-shell.test.mjs`. If a future plan
+// needs to re-introduce stubs here, copy the helper from one of the
+// other cluster files (e.g. src/adapter/phaseLifecycle.mjs).
 
 /**
  * Convert a repo-relative path to an absolute path under this.projectRoot.
@@ -463,8 +467,87 @@ export default {
     chmodSync(join(dir, '.beads'), 0o700);
     return dir;
   },
-  async putNamedDoc(category, key, body)      { NOT_IMPLEMENTED('putNamedDoc', 7, 'PRIM-02'); },
-  async getNamedDoc(category, key)            { NOT_IMPLEMENTED('getNamedDoc', 7, 'PRIM-02'); },
+  /**
+   * Write a named-doc body to disk + write a bd memory index entry (D-10).
+   *
+   * Dual-write per D-10:
+   *   - Disk: <projectRoot>/.planning/<category>/<key>.md (atomic via D-08)
+   *   - bd memory: gsd-beads:named-doc:<category>:<key> = JSON({category, key, last_write, byte_length})
+   *
+   * The body is NOT inlined into the bd memory entry — D-10 explicitly
+   * stores existence + timestamp + length only (REQ-07: bodies live on
+   * disk for grep-readability).
+   *
+   * Validation:
+   *   - category MUST be one of NAMED_DOC_CATEGORIES (closed allowlist).
+   *   - key MUST be a non-empty string.
+   *   - key MUST NOT contain `..`, `/`, or `\` (T-7-01 path-traversal mitigation).
+   *
+   * 1 bd spawn (within QUAL-07 budget). cwd: this._beadsRoot.
+   */
+  async putNamedDoc(category, key, body) {
+    if (typeof category !== 'string' || !NAMED_DOC_CATEGORIES.includes(category)) {
+      throw new Error(
+        `BeadsAdapter.putNamedDoc: category "${category}" not in NAMED_DOC_CATEGORIES — closed allowlist per D-10. Allowed: ${NAMED_DOC_CATEGORIES.join(', ')}`,
+      );
+    }
+    if (typeof key !== 'string' || !key.length) {
+      throw new TypeError('putNamedDoc: key must be a non-empty string');
+    }
+    // T-7-01: refuse keys that would escape the <category>/ directory.
+    if (/[/\\]|\.\./.test(key)) {
+      throw new TypeError(
+        'putNamedDoc: key must not contain path separators (`/`, `\\`) or `..`',
+      );
+    }
+    this._ensureBd();
+    // Disk write (atomic): .planning/<category>/<key>.md
+    const relPath = `.planning/${category}/${key}.md`;
+    atomicWriteFile(_abs(this, relPath), body);
+    // bd memory index (D-10: existence + timestamp + length only).
+    const index = {
+      category,
+      key,
+      last_write: new Date().toISOString(),
+      byte_length: Buffer.byteLength(body, 'utf-8'),
+    };
+    const memKey = `gsd-beads:named-doc:${category}:${key}`;
+    bd(['remember', JSON.stringify(index), '--key', memKey], {
+      cwd: this._beadsRoot,
+      env: { ...process.env, BEADS_ACTOR: 'seed' },
+      parseJson: false,
+    });
+  },
+
+  /**
+   * Read a named-doc body from disk (D-10).
+   *
+   * The bd memory index is for existence/timestamp listings (D-10 / Phase 9
+   * aggregation); it never stores bodies. 0 bd spawns.
+   *
+   * Returns the disk file contents (utf-8) or `null` if absent.
+   *
+   * Validation matches putNamedDoc — closed-allowlist on category and
+   * T-7-01 path-traversal guard on key (read-side defense in depth).
+   */
+  async getNamedDoc(category, key) {
+    if (typeof category !== 'string' || !NAMED_DOC_CATEGORIES.includes(category)) {
+      throw new Error(
+        `BeadsAdapter.getNamedDoc: category "${category}" not in NAMED_DOC_CATEGORIES — closed allowlist per D-10. Allowed: ${NAMED_DOC_CATEGORIES.join(', ')}`,
+      );
+    }
+    if (typeof key !== 'string' || !key.length) {
+      throw new TypeError('getNamedDoc: key must be a non-empty string');
+    }
+    if (/[/\\]|\.\./.test(key)) {
+      throw new TypeError(
+        'getNamedDoc: key must not contain path separators (`/`, `\\`) or `..`',
+      );
+    }
+    const abs = _abs(this, `.planning/${category}/${key}.md`);
+    if (!existsSync(abs)) return null;
+    return readFileSync(abs, 'utf-8');
+  },
 
   /**
    * Always throws UnsupportedOperationError with the locked D-16 message
