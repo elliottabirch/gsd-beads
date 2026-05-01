@@ -58,9 +58,13 @@ case2_ok=1
 {
   fixture=$(mktemp -d)
   bash "$SEED_FIXTURE" "$fixture" >/dev/null 2>&1
-  v01_count=$(cd "$fixture" && BEADS_ACTOR=seed bd list --status=closed -l version:v0.1 --type=epic --json | jq 'length')
-  v02_count=$(cd "$fixture" && BEADS_ACTOR=seed bd list --status=open -l version:v0.2 --type=epic --json | jq 'length')
-  v03_count=$(cd "$fixture" && BEADS_ACTOR=seed bd list --status=open -l version:v0.3 --type=epic --json | jq 'length')
+  # Phase 7 Plan 08: filter on gsd:phase (additional label) so the new
+  # milestone beads (gsd:milestone + version:vX.Y) introduced for D-09
+  # COMMENT_EVENT_TYPES dispatch don't pollute phase counts. Test intent
+  # is "phase epic counts per milestone", not "any epic with version:vX.Y".
+  v01_count=$(cd "$fixture" && BEADS_ACTOR=seed bd list --status=closed -l version:v0.1 -l gsd:phase --type=epic --json | jq 'length')
+  v02_count=$(cd "$fixture" && BEADS_ACTOR=seed bd list --status=open -l version:v0.2 -l gsd:phase --type=epic --json | jq 'length')
+  v03_count=$(cd "$fixture" && BEADS_ACTOR=seed bd list --status=open -l version:v0.3 -l gsd:phase --type=epic --json | jq 'length')
   if [ "$v01_count" -ne 2 ] || [ "$v02_count" -ne 7 ] || [ "$v03_count" -ne 2 ]; then
     case2_ok=0
     echo "  v0.1 closed=$v01_count (expected 2), v0.2 open=$v02_count (expected 7), v0.3 open=$v03_count (expected 2)"
