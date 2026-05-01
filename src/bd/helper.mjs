@@ -5,7 +5,7 @@
 // Test parity in tests/shadow-tests/bd-helper.test.mjs.
 
 import { spawnSync } from 'node:child_process';
-import { BeadsNotInstalled, BeadsCorrupt, BeadsEmpty } from './beads-errors.mjs';
+import { BeadsNotInstalled, BeadsCorrupt, BeadsEmpty } from './errors.mjs';
 
 /**
  * Invoke bd. Returns parsed JSON on success; throws sentinel subtypes on failure.
