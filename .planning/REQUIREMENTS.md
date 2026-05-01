@@ -617,14 +617,38 @@ empty values, edge cases per ARCH-03 spec).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEAN-01..04 | (TBD by roadmapper) | Pending |
-| ARCH-01..05 | (TBD by roadmapper) | Pending |
-| DOC-01..02 | (TBD by roadmapper) | Pending |
-| CAP-01 | (TBD by roadmapper) | Pending |
-| PRIM-01..02 | (TBD by roadmapper) | Pending |
-| IMPL-01..12 | (TBD by roadmapper) | Pending |
-| TEST-01 | (TBD by roadmapper) | Pending |
-| CONF-01..03 | (TBD by roadmapper) | Pending |
+| CLEAN-01 (v0.2 shadow source archived) | Phase 6 | Pending |
+| CLEAN-02 (obsolete hooks archived) | Phase 6 | Pending |
+| CLEAN-03 (obsolete regen scripts archived) | Phase 6 | Pending |
+| CLEAN-04 (install script removed) | Phase 6 | Pending |
+| ARCH-01 (`src/bd/`) | Phase 6 | Pending |
+| ARCH-02 (`src/helpers/`) | Phase 6 | Pending |
+| ARCH-03 (`src/format/phase.mjs`) | Phase 6 | Pending |
+| ARCH-04 (`src/adapter.mjs` BeadsAdapter class) | Phase 6 | Pending |
+| ARCH-05 (`package.json` rewrite) | Phase 6 | Pending |
+| DOC-01 (README.md) | Phase 6 | Pending |
+| DOC-02 (CLAUDE.md) | Phase 6 | Pending |
+| TEST-01 (carry-forward fixture tests) | Phase 6 | Pending |
+| CAP-01 (capabilities flag) | Phase 7 | Pending |
+| PRIM-01 (Bin A generic CRUD) | Phase 7 | Pending |
+| PRIM-02 (6 foundational primitives) | Phase 7 | Pending |
+| CONF-01 (conformance test scaffolding) | Phase 7 (scaffolding); Phase 13 (full suite) | Pending |
+| CONF-02 (round-trip property tests for `src/format/phase.mjs`) | Phase 7 | Pending |
+| IMPL-01 (phase/plan lifecycle) | Phase 8 | Pending |
+| IMPL-02 (roadmap/milestone) | Phase 8 | Pending |
+| IMPL-03 (state + decisions/blockers/sessions) | Phase 9 | Pending |
+| IMPL-04 (verify/UAT/validation/patterns/security/reviews) | Phase 10 | Pending |
+| IMPL-05 (discuss/spec/research/discovery/explore) | Phase 11 | Pending |
+| IMPL-06 (todos/notes/seeds/memory/handoff) | Phase 11 | Pending |
+| IMPL-07 (workstream/workspace/config/skill) | Phase 12 | Pending |
+| IMPL-08 (spike/sketch/codebase/intel/learnings) | Phase 12 | Pending |
+| IMPL-09 (debug subsystem) | Phase 12 | Pending |
+| IMPL-10 (reports/forensics/dependency-analysis/sidecar) | Phase 12 | Pending |
+| IMPL-11 (doc ingestion + templates + commit) | Phase 12 | Pending |
+| IMPL-12 (workflow init bundlers) | Phase 13 | Pending |
+| CONF-03 (bd determinism contract preserved) | Phase 13 | Pending |
 
-**Coverage:** 30 v1.0 requirement entries (CLEAN×4 + ARCH×5 + DOC×2 +
-CAP×1 + PRIM×2 + IMPL×12 + TEST×1 + CONF×3) pending phase assignment.
+**Coverage:** 30/30 v1.0 requirement entries mapped to exactly one
+owning phase (CONF-01 is split across Phase 7 scaffolding and Phase 13
+full suite; the cross-reference is documented in both phases'
+success criteria). No orphans.
