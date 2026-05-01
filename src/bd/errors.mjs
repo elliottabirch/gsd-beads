@@ -13,6 +13,7 @@ export const BeadsCause = Object.freeze({
   VersionMismatch: 'version-mismatch',
   Empty:           'empty',
   Unknown:         'unknown',
+  Unsupported:     'unsupported',
 });
 
 export class BeadsUnavailableError extends Error {
@@ -51,5 +52,22 @@ export class BeadsEmpty extends BeadsUnavailableError {
   constructor(message, opts = {}) {
     super(message, { ...opts, cause: BeadsCause.Empty });
     this.name = 'BeadsEmpty';
+  }
+}
+
+export class UnsupportedOperationError extends BeadsUnavailableError {
+  /**
+   * @param {string} method  adapter method name (e.g., 'writeBinaryAsset')
+   * @param {string} flag    capabilities flag name (e.g., 'binaryAsset')
+   * @param {string} [hint]  optional caller guidance
+   *
+   * D-16 locks the throw-message format byte-for-byte; conformance asserts it.
+   */
+  constructor(method, flag, hint = '') {
+    const msg = `BeadsAdapter.${method}: not supported (capabilities.${flag}=false).${hint ? ' ' + hint : ''}`;
+    super(msg, { cause: BeadsCause.Unsupported });
+    this.name = 'UnsupportedOperationError';
+    this.method = method;
+    this.flag = flag;
   }
 }
