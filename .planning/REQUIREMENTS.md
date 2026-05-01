@@ -302,11 +302,13 @@ preserved as historical reference (not `git rm`).
 `archive/v0.2-shadow/hooks/`. `hooks/bd-sync.sh` moves to the same
 archive directory.
 
-### CLEAN-03: Obsolete regen scripts archived
+### CLEAN-03: Obsolete regen + cascade-loop scripts archived
 
-`scripts/regen-roadmap.sh` and `scripts/regen-requirements.sh` move to
-`archive/v0.2-shadow/scripts/`. `scripts/cascade-loop.sh` stays
-(carry-forward bd primitive).
+`scripts/regen-roadmap.sh`, `scripts/regen-requirements.sh`, and
+`scripts/regen-state.sh` move to `archive/v0.2-shadow/scripts/`.
+scripts/cascade-loop.sh also archives to the same path; Phase 8
+reintroduces the cascade primitive as `src/bd/cascade.mjs` when
+wiring `completePhaseAndCascade`.
 
 ### CLEAN-04: Install script removed or repurposed
 
