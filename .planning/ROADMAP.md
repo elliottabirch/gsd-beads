@@ -195,7 +195,19 @@ Plans:
   4. `tests/conformance/` directory exists with adapter-shape tests runnable against the BeadsAdapter standalone using `tests/fixtures/seed.jsonl`. The harness is structured so that when the fork's MarkdownAdapter ships, the same tests run cross-adapter (CONF-01 scaffolding requirement).
   5. Round-trip property tests for `src/format/phase.mjs` pass for all canonical inputs (single-line goals, multi-line success criteria, empty values, edge cases per ARCH-03 spec) — `parsePhaseTitle(formatPhaseTitle(x)) === x` and `parsePhaseDescription(formatPhaseDescription(x)) === x`.
 
-**Plans**: TBD
+**Plans:** 10 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — pathRouter.mjs closed-enum routing registry + UnsupportedOperationError class (PRIM-01, PRIM-02)
+- [ ] 07-02-PLAN.md — src/format/section.mjs slugify + locateSection + rewriteSection (PRIM-01, PRIM-02)
+- [ ] 07-03-PLAN.md — src/format/frontmatter.mjs flat-scalar YAML parser/formatter/merger (PRIM-01)
+- [ ] 07-04-PLAN.md — Bin A records (getRecord/putRecord/removeRecord/exists/listCollection) + atomicWriteFile helper (PRIM-01)
+- [ ] 07-05-PLAN.md — Bin A section + frontmatter primitives (5 methods) (PRIM-01, PRIM-02)
+- [ ] 07-06-PLAN.md — recordStateEvent dispatch + writeBinaryAsset throw + capabilities rationale comments (PRIM-02, CAP-01)
+- [ ] 07-07-PLAN.md — snapshot/restore + putNamedDoc/getNamedDoc (16/16 primitives complete) (PRIM-02)
+- [ ] 07-08-PLAN.md — conformance harness (run.mjs + fixture.mjs + capabilities.test.mjs) + seed.jsonl milestone-bead enrichment (CAP-01, CONF-01)
+- [ ] 07-09-PLAN.md — Bin A conformance tests (binA-records + binA-section + binA-frontmatter) (CONF-01, PRIM-01)
+- [ ] 07-10-PLAN.md — Foundational conformance tests (events + namedDoc + snapshot) + CONF-02 audit (CONF-01, CONF-02, PRIM-02)
 
 ### Phase 8: Phase/plan + roadmap/milestone domain methods
 
