@@ -169,7 +169,16 @@ v0.2 placeholders are gone; these are new v1.0 phases with the same numbers.
   5. `README.md` and `CLAUDE.md` describe post-cleanup architecture (adapter library, sibling fork at `~/code/get-shit-done`, refactor-on-fork-stabilize policy).
   6. Carry-forward tests pass against the new paths: `tests/shadow-tests/{bd-helper,beads-errors,findBeadsRoot}.test.mjs` (renamed where needed) target `src/bd/*`; `tests/fixtures/seed.jsonl` reproduces byte-identically via existing `build-seed.sh` (CONF-03 invariant preserved).
 
-**Plans**: TBD
+**Plans:** 7 plans
+
+Plans:
+- [ ] 06-01-wave0-test-scaffolding-PLAN.md — Wave 0 test files + archive directory scaffolding (TEST-01 partial)
+- [ ] 06-02-archive-shadow-source-PLAN.md — git mv shadow bin/, hooks/, scripts/ to archive; delete install.sh (CLEAN-01, CLEAN-02, CLEAN-04)
+- [ ] 06-03-archive-shadow-tests-PLAN.md — git mv 26 shadow tests + 5 wholesale test dirs to archive (TEST-01)
+- [ ] 06-04-carry-forward-extraction-PLAN.md — verbatim move bd-helper/errors + extract findBeadsRoot + 4 helpers + migrate 11 tests (ARCH-01, ARCH-02, TEST-01)
+- [ ] 06-05-format-phase-module-PLAN.md — implement src/format/phase.mjs bidirectional parser + 11 fixtures + round-trip property tests (ARCH-03)
+- [ ] 06-06-adapter-shell-and-clusters-PLAN.md — BeadsAdapter shell + 8 cluster stub files (~270 stubs throwing canonical message) (ARCH-04)
+- [ ] 06-07-package-and-docs-PLAN.md — package.json + README + CLAUDE.md + CONTRIBUTING.md + REQUIREMENTS.md CLEAN-03 edit (ARCH-05, DOC-01, DOC-02, CLEAN-03)
 
 ### Phase 7: Capabilities flag + Bin A primitives + foundational primitives
 
