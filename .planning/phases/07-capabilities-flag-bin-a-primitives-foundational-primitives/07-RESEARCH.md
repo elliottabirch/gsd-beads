@@ -1194,32 +1194,37 @@ async updateFrontmatter(path, field, value) {
 | A6 | The current `seed.jsonl` enrichment surface is small (a few memories + a few comments + a few named-doc disk records) | Phase 7 seed enrichment scope | Plan-phase determines exact additions. The fixture today has 33 issues + 2 memories. Adding 5-10 memories + 3-5 comments + 3-5 named-doc records keeps the fixture readable + complete. |
 | A7 | Hand-rolled section locator with code-fence guard handles all canonical .planning/* markdown variants | getSection/updateSection conformance | Mitigation: conformance includes a fixture with a code-fence-containing-pseudo-heading and asserts the parser doesn't match it. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **D-09 amendment: comments labeled vs authored as `gsd:event:<type>`**
    - What we know: bd v1.0.3 `bd comments add` does NOT accept a label flag. The closest structured slot is `--author`.
    - What's unclear: Whether the user prefers (a) keep the design-level "label" intent and emulate it (e.g., prefix the comment text with `[gsd:event:session]` then strip on read), or (b) accept the mechanical reality and amend D-09 to "authored as".
    - Recommendation: (b). The `author` field is just as filterable, just as round-trippable, and avoids the parsing tax. Plan-phase or discuss-phase confirms with the user before implementation.
+   - **RESOLVED:** Plans 06, 07, 10 use `bd comments add <id> --author 'gsd:event:<type>' '<payload>'` per RESEARCH §Pattern 4 Recommendation (b). bd v1.0.3 has no `--label` flag on comments — author field round-trips through `bd export --json` and is filterable client-side. Treat CONTEXT D-09's wording "comments labeled gsd:event:<type>" as "comments authored as gsd:event:<type>" (mechanical reality).
 
 2. **`updateFrontmatter` on bd-routed paths exceeds QUAL-07 budget**
    - What we know: Changing a label-encoded field requires `bd show` + `bd label remove` + `bd label add` = 3 spawns. D-21 says ≤2 per public method invocation.
    - What's unclear: Whether to (a) cache labels at the start of the call so the read costs zero (still 3 spawns total), (b) bump QUAL-07 to ≤3 specifically for label-rewrite, or (c) accept that QUAL-07 applies to "READ" methods primarily and writes are exempt.
    - Recommendation: (c) is most defensible — QUAL-07's stated rationale (REQ-QUAL-07: "performance budget for read fan-out") is read-side. Plan-phase confirms or escalates to a fresh decision.
+   - **RESOLVED:** Plan 05 implements updateFrontmatter for bd-routed paths via 3 spawns (read via `bd export --json` + remove via `bd label remove` + add via `bd label add`). Per RESEARCH Recommendation (c), QUAL-07 ≤2-spawn budget is treated as a read-side ceiling; write-side mutations are exempt and documented in plan 05's task notes.
 
 3. **`tests/fixtures/seed.jsonl` enrichment scope**
    - What we know: Phase 7 needs at least: a few memories under `<milestone>:<type>:<id>` keys, a few comments authored as `gsd:event:<type>`, a few sample named-doc records.
    - What's unclear: How many of each. Conformance per primitive needs ≥1 happy-path fixture; for `recordStateEvent`'s 10 types that's 10 fixtures. Plan-phase decides whether to: (a) seed all 10 in `seed.jsonl` (canonical state grows by 10 entries) or (b) seed a representative subset (3-5) and have the conformance test mutate-then-read for the rest.
    - Recommendation: (b). seed.jsonl stays small + readable; conformance write-then-read covers each type from a clean baseline.
+   - **RESOLVED:** Plan 08 enriches seed.jsonl additively with the milestone bead (`gsd-beads:milestone:v1.0`) plus a representative subset (3-5) of issue/memory/comment shapes per RESEARCH Recommendation (b). Per-test mutators handle any additional records each conformance test needs. CONF-03 byte-identity preserved via `BEADS_ACTOR=seed` regen through `tests/fixtures/build-seed.sh`.
 
 4. **`commitPlanningState` no-op behavior**
    - What we know: D-16 + CAP-01 lock `capabilities.commitPlanningState = false`. The phase boundary says "method is a no-op (or thin throw) at this phase."
    - What's unclear: No-op (silently succeed; harmless) vs throw (consumers checking the flag are required to skip). The phase boundary leans no-op; Phase 13 finalizes.
    - Recommendation: Throw `UnsupportedOperationError` to be consistent with `writeBinaryAsset` (also flag=false). A consumer that DOES call without checking the flag is a bug; making it loud now prevents shipping a broken consumer.
+   - **RESOLVED:** Defer to Phase 13 per CONTEXT scope (`<domain>` Out of scope: "commitPlanningState semantics — Phase 13 / OQ-08 owns final cross-adapter contract; Phase 7's flag value is false and the method remains the Phase-6 stub"). Phase 7 only locks `capabilities.commitPlanningState = false` per D-16. The longTail.mjs Phase-6 stub is intentionally NOT migrated to UnsupportedOperationError this phase; doing so is a Phase 13 deliverable.
 
 5. **`describe.each` parameterization — exact node:test idiom**
    - What we know: node:test has no native describe.each. The plain-JS for-loop pattern works.
    - What's unclear: Whether the test labels surface usefully in `node --test` output. Different test reporters render `describe('...[label]')` differently.
    - Recommendation: Use `describe(\`<cluster> [\${label}]\`, () => {...})` and verify the default reporter shows them clearly. If the labels collapse, switch to `test('[\${label}] cluster.method behavior', ...)` at the test level.
+   - **RESOLVED:** Plans 08-10 implement the `runConformance(makeAdapter, label)` exported-function pattern per RESEARCH Recommendation. Driver `tests/conformance/run.mjs` registers each conformance file's export and dispatches the BeadsAdapter factory; `RUN_CROSS_ADAPTER=1` toggles a future MarkdownAdapter factory. node:test's lack of `describe.each` is documented in [nodejs/node#47902]; explicit JS dispatch is the idiomatic workaround.
 
 ## Environment Availability
 

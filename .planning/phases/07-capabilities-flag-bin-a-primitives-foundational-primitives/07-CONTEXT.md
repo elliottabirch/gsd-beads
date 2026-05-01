@@ -306,37 +306,46 @@ on:
   D-2026-04-30-05 deliberately fixed the seven-bit shape; ad-hoc bits
   break "shape is the contract".
 
-### Carried forward from Phase 6 (do NOT re-decide)
+### Carried forward from Phase 6 (do NOT re-decide) [informational]
 
-- **D-17:** Cluster-binding pattern: `Object.assign(BeadsAdapter.prototype,
+> [informational] — D-17 through D-24 are inherited Phase 6 contracts.
+> They constrain HOW Phase 7 plans implement the locked decisions but
+> are NOT new decisions Phase 7 plans need to translate. Plan-level
+> traceability lives in Phase 6's plans; Phase 7 honors them
+> structurally (e.g., D-17's `Object.assign` cluster binding stays
+> intact because Phase 7 only edits the `primitives` cluster file
+> body; D-18's `_ensureBd()` is called inside every bd-routed primitive;
+> D-19's `Object.freeze` continues to wrap the capabilities literal).
+
+- **D-17 [informational]:** Cluster-binding pattern: `Object.assign(BeadsAdapter.prototype,
   ...8 cluster method-bags)` (Phase 6 D-04). Phase 7 edits the
   `primitives` cluster file; the binding mechanism is untouched.
-- **D-18:** Lazy bd validation via `_ensureBd()` — first-method-call
+- **D-18 [informational]:** Lazy bd validation via `_ensureBd()` — first-method-call
   triggers `findBeadsRoot()` lookup and caches the result (Phase 6 D-02
   + Phase 4 D-01..D-04). Every Phase 7 primitive that touches bd
   starts with `this._ensureBd()`; primitives that pass through to disk
   (raw narrative reads/writes) skip it.
-- **D-19:** Static `capabilities` declared with `Object.freeze`
+- **D-19 [informational]:** Static `capabilities` declared with `Object.freeze`
   (Phase 6 D-03). Phase 7 just edits the literal values; the
   `BeadsAdapter.capabilities` access pattern (no instance required)
   stays.
-- **D-20:** `BEADS_ACTOR=seed` discipline preserved on every bd
+- **D-20 [informational]:** `BEADS_ACTOR=seed` discipline preserved on every bd
   invocation that affects determinism (snapshot/restore, named-doc
   index writes if they participate in seed.jsonl). `bd-helper.mjs`
   signature already accepts an env override.
-- **D-21:** ≤2 bd spawns per public method invocation (QUAL-07
+- **D-21 [informational]:** ≤2 bd spawns per public method invocation (QUAL-07
   carry-forward). Bin A reads against bd typically use ONE
   `bd export --json` and parse client-side; writes use ONE `bd
   update`/`bd remember`/etc. Conformance has timing assertions on
   hot paths.
-- **D-22:** `findBeadsRoot()` semantics — env-var first, parent-walk
+- **D-22 [informational]:** `findBeadsRoot()` semantics — env-var first, parent-walk
   bounded at git root, `fs.realpath` follows symlinks. Phase 4
   D-01..D-04 carry-forward.
-- **D-23:** All-epic + labels strategy for bd vocabulary
+- **D-23 [informational]:** All-epic + labels strategy for bd vocabulary
   (`gsd:phase`, `gsd:plan`, `gsd:requirement`, `gsd:seed`, `gsd:todo`,
   `gsd:event:<type>`, `gsd:named-doc:<category>` — new for Phase 7);
   spike findings authoritative.
-- **D-24:** Stub style preserved for any Phase 7 code that intentionally
+- **D-24 [informational]:** Stub style preserved for any Phase 7 code that intentionally
   remains stub (none expected — Phase 7 implements ALL 16 primitives;
   if any sub-method falls out of scope mid-execution, use Phase 6's
   exact `'BeadsAdapter.<m>: not implemented (Phase N / IMPL-NN)'`
