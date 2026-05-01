@@ -20,7 +20,9 @@ import { setupFreshAdapter } from './fixture.mjs';
 
 const FILES = [
   './capabilities.test.mjs',
-  // Plan 09 adds: './binA-records.test.mjs', './binA-section.test.mjs', './binA-frontmatter.test.mjs'
+  './binA-records.test.mjs',
+  './binA-section.test.mjs',
+  './binA-frontmatter.test.mjs',
   // Plan 10 adds: './foundational-events.test.mjs', './foundational-namedDoc.test.mjs', './foundational-snapshot.test.mjs'
 ];
 
