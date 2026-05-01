@@ -207,7 +207,7 @@ Plans:
 - [x] 07-07-PLAN.md — snapshot/restore + putNamedDoc/getNamedDoc (16/16 primitives complete) (PRIM-02)
 - [x] 07-08-PLAN.md — conformance harness (run.mjs + fixture.mjs + capabilities.test.mjs) + seed.jsonl milestone-bead enrichment (CAP-01, CONF-01)
 - [x] 07-09-PLAN.md — Bin A conformance tests (binA-records + binA-section + binA-frontmatter) (CONF-01, PRIM-01)
-- [ ] 07-10-PLAN.md — Foundational conformance tests (events + namedDoc + snapshot) + CONF-02 audit (CONF-01, CONF-02, PRIM-02)
+- [x] 07-10-PLAN.md — Foundational conformance tests (events + namedDoc + snapshot) + CONF-02 audit (CONF-01, CONF-02, PRIM-02)
 
 ### Phase 8: Phase/plan + roadmap/milestone domain methods
 
