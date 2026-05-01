@@ -617,10 +617,10 @@ empty values, edge cases per ARCH-03 spec).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEAN-01 (v0.2 shadow source archived) | Phase 6 | Pending |
-| CLEAN-02 (obsolete hooks archived) | Phase 6 | Pending |
+| CLEAN-01 (v0.2 shadow source archived) | Phase 6 | Complete |
+| CLEAN-02 (obsolete hooks archived) | Phase 6 | Complete |
 | CLEAN-03 (obsolete regen scripts archived) | Phase 6 | Pending |
-| CLEAN-04 (install script removed) | Phase 6 | Pending |
+| CLEAN-04 (install script removed) | Phase 6 | Complete |
 | ARCH-01 (`src/bd/`) | Phase 6 | Pending |
 | ARCH-02 (`src/helpers/`) | Phase 6 | Pending |
 | ARCH-03 (`src/format/phase.mjs`) | Phase 6 | Pending |
