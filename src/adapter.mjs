@@ -48,15 +48,35 @@ export class BeadsAdapter {
   }
 }
 
-// Static capabilities flag per D-03 / CAP-01 / D-2026-04-30-05.
-// Placeholder booleans; Phase 7 sets to implementation reality.
+// Static capabilities flag per D-2026-04-30-05 / D-16. Frozen 7-key shape;
+// each `false` carries a rationale (Phase 7 SC#1 lint reads them).
 BeadsAdapter.capabilities = Object.freeze({
+  /** Generic record CRUD (getRecord/putRecord/removeRecord) — supported via path router. */
   record: true,
+  /** Section-scoped reads/writes (getSection/updateSection) — supported via section.mjs. */
   section: true,
+  /**
+   * Binary asset writes — UNSUPPORTED. bd does not store binaries
+   * natively; `writeBinaryAsset` throws UnsupportedOperationError.
+   * v1.1+ may add a configurable external blob sink.
+   */
   binaryAsset: false,
+  /** Snapshot/restore — supported via `bd export --json` + `bd init --from-jsonl`. */
   snapshot: true,
+  /**
+   * Multi-bead atomic transactions — UNSUPPORTED. bd has no native
+   * transaction primitive. Consumers compose `snapshot/restore` for
+   * transactional semantics.
+   */
   transaction: false,
+  /** Named-doc category writes (intel/codebase/research/etc.) — supported via disk + bd memory index. */
   namedDoc: true,
+  /**
+   * `commitPlanningState` — UNSUPPORTED (no-op semantics). beads is its
+   * own transactional store; the cross-adapter contract for committing
+   * planning state is owned by Phase 13 / OQ-08. Calling raises
+   * UnsupportedOperationError.
+   */
   commitPlanningState: false,
 });
 
