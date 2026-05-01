@@ -142,7 +142,7 @@ v0.2 placeholders are gone; these are new v1.0 phases with the same numbers.
 
 ## Phases (v1.0)
 
-- [ ] **Phase 6: Cleanup + adapter-library scaffolding** — Archive v0.2 shadow code; restructure repo as adapter library (`src/` layout); package.json + docs refresh; carry-forward tests pass against new paths
+- [x] **Phase 6: Cleanup + adapter-library scaffolding** — Archive v0.2 shadow code; restructure repo as adapter library (`src/` layout); package.json + docs refresh; carry-forward tests pass against new paths (completed 2026-05-01)
 - [ ] **Phase 7: Capabilities flag + Bin A primitives + foundational primitives** — Adapter contract surface: `capabilities` flag, 10 generic CRUD primitives, 6 foundational primitives (`recordStateEvent`, `snapshot/restore`, `putNamedDoc`, `writeBinaryAsset`)
 - [ ] **Phase 8: Phase/plan + roadmap/milestone domain methods** — High-frequency paths (~25 named methods covering phase lifecycle, plan/summary handling, roadmap evolution, milestone archival)
 - [ ] **Phase 9: State + decisions/blockers/sessions domain methods** — STATE.md-shaped methods (~10) with `recordStateEvent` discriminated-union dispatch as the spine
@@ -169,7 +169,7 @@ v0.2 placeholders are gone; these are new v1.0 phases with the same numbers.
   5. `README.md` and `CLAUDE.md` describe post-cleanup architecture (adapter library, sibling fork at `~/code/get-shit-done`, refactor-on-fork-stabilize policy).
   6. Carry-forward tests pass against the new paths: `tests/shadow-tests/{bd-helper,beads-errors,findBeadsRoot}.test.mjs` (renamed where needed) target `src/bd/*`; `tests/fixtures/seed.jsonl` reproduces byte-identically via existing `build-seed.sh` (CONF-03 invariant preserved).
 
-**Plans:** 6/7 plans executed
+**Plans:** 7/7 plans complete
 
 Plans:
 - [x] 06-01-wave0-test-scaffolding-PLAN.md — Wave 0 test files + archive directory scaffolding (TEST-01 partial)
@@ -178,7 +178,7 @@ Plans:
 - [x] 06-04-carry-forward-extraction-PLAN.md — verbatim move bd-helper/errors + extract findBeadsRoot + 4 helpers + migrate 11 tests (ARCH-01, ARCH-02, TEST-01)
 - [x] 06-05-format-phase-module-PLAN.md — implement src/format/phase.mjs bidirectional parser + 11 fixtures + round-trip property tests (ARCH-03)
 - [x] 06-06-adapter-shell-and-clusters-PLAN.md — BeadsAdapter shell + 8 cluster stub files (~270 stubs throwing canonical message) (ARCH-04)
-- [ ] 06-07-package-and-docs-PLAN.md — package.json + README + CLAUDE.md + CONTRIBUTING.md + REQUIREMENTS.md CLEAN-03 edit (ARCH-05, DOC-01, DOC-02, CLEAN-03)
+- [x] 06-07-package-and-docs-PLAN.md — package.json + README + CLAUDE.md + CONTRIBUTING.md + REQUIREMENTS.md CLEAN-03 edit (ARCH-05, DOC-01, DOC-02, CLEAN-03)
 
 ### Phase 7: Capabilities flag + Bin A primitives + foundational primitives
 
@@ -334,7 +334,7 @@ a big-bang at the end.
 | 3. Cross-worktree validation | — | Complete | 2026-04-28 |
 | 4. findBeadsRoot() + parity test infrastructure | — | Complete (v0.2 shipped) | 2026-04-29 |
 | 5. roadmap.* read handlers | 5/5 | Complete (v0.2 shipped) | 2026-04-30 |
-| 6. progress.* read handlers (v0.2) | 6/7 | In Progress|  |
+| 6. progress.* read handlers (v0.2) | 7/7 | Complete   | 2026-05-01 |
 | 7. state.* read handlers (v0.2) | — | Canceled (v0.2 superseded — see DECISIONS.md D-2026-04-30-01) | — |
 | 8. phase resolution + lookup handlers (v0.2) | — | Canceled (v0.2 superseded — see DECISIONS.md D-2026-04-30-01) | — |
 | 9. init.* read handlers (v0.2) | — | Canceled (v0.2 superseded — see DECISIONS.md D-2026-04-30-01) | — |
