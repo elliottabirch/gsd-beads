@@ -1,8 +1,0 @@
-✓ wttest-h4n ● P0 epic Cross-WT epic
-├── ✓ wttest-4tj ● P2 task leaf in A
-└── ✓ wttest-d7e ● P2 task leaf in B
-○ wttest-kz0 ● P1 issue-from-B: hi from B
-✓ wttest-lan ● P2 task issue-from-A: hello from A
-○ wttest-06x ● P3 from-B iter-1
-○ wttest-0ao ● P3 seq-1
-○ wttest-0wc ● P3 seq-17
