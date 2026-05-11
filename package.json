@@ -1,0 +1,44 @@
+{
+  "name": "gsd-beads",
+  "version": "1.0.0-alpha.0",
+  "description": "BeadsAdapter implementation of the get-shit-done StorageAdapter contract; targets bd v1.0.3.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "CLAUDE.md",
+    "CONTRIBUTING.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/smoke",
+    "test:conformance": "vitest run tests/conformance.test.ts"
+  },
+  "peerDependencies": {
+    "get-shit-done-cc": "*"
+  },
+  "peerDependenciesMeta": {
+    "get-shit-done-cc": { "optional": true }
+  },
+  "devDependencies": {
+    "get-shit-done-cc": "file:../get-shit-done",
+    "vitest": "^4.1.6",
+    "typescript": "^5",
+    "@types/node": "^22"
+  }
+}
