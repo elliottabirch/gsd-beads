@@ -109,10 +109,20 @@ async function _resolveMilestoneBead(
  * memory-key suffix so `{milestone}:{type}:{deriveEventId(payload)}`
  * deduplicates identical payloads without pulling in a full hash library.
  *
- * Djb2-style; collision-resistant enough for dedupe at event-family
- * frequencies (see threat-model T-06-06-01 — dedupe false-positive
- * treated as `{applied: false, reason: 'duplicate'}`, which is a valid
- * outcome for a record that already matches byte-for-byte).
+ * Djb2-style 32-bit hash rendered as base-36 over the UNSIGNED full range
+ * (CR-02 fix): the original implementation used `Math.abs(h).toString(36)`
+ * which (a) halves the effective keyspace below the already-narrow 31 bits
+ * because `h` and `-h` collapse to the same string, and (b) is a fixed
+ * point at `-2^31` (`Math.abs(-2147483648) === -2147483648` in JS), which
+ * would emit a '-'-prefixed label fragment. `h >>> 0` coerces to an
+ * unsigned 32-bit integer, preserving the full range.
+ *
+ * For mutation-label dedupe (blocker_added / blocker_resolved) this is the
+ * PRIMARY KEY against which silent-loss and resolve-wrong-blocker bugs
+ * manifest; 32-bit unsigned is still narrow (birthday collisions ~65k
+ * distinct blockers), but it covers the realistic working set and is a
+ * strict improvement over halved-keyspace. A full SHA-256-truncated upgrade
+ * is Phase 6.1 scope if blocker volume ever warrants it.
  */
 function _deriveEventId(payload: unknown): string {
   const json = JSON.stringify(payload) ?? '';
@@ -120,7 +130,9 @@ function _deriveEventId(payload: unknown): string {
   for (let i = 0; i < json.length; i++) {
     h = ((h << 5) + h + json.charCodeAt(i)) | 0;
   }
-  return Math.abs(h).toString(36);
+  // `>>> 0` → unsigned 32-bit coercion. Preserves full keyspace vs Math.abs
+  // (which collapses h and -h) and never emits a '-'-prefixed string.
+  return (h >>> 0).toString(36);
 }
 
 /**
