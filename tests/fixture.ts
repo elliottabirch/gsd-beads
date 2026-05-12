@@ -14,7 +14,7 @@
  * factory around setupFreshAdapter to preserve harness contract.
  */
 
-import { mkdtemp, mkdir, chmod, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, chmod, rm, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,14 +48,19 @@ export async function setupFreshAdapter(): Promise<FreshAdapterHandle> {
   spawnSync('git', ['config', 'user.email', 'seed@test.local'], { cwd: projectDir });
   spawnSync('git', ['config', 'user.name', 'Seed Test'], { cwd: projectDir });
 
-  // bd init from seed.jsonl (committed deterministic seed)
-  const seedPath = join(__dirname, 'fixtures/seed.jsonl');
+  // bd v1.0.4: `--from-jsonl` is a boolean flag; the seed file must pre-exist
+  // at `.beads/issues.jsonl` in the project dir before `bd init` runs.
+  // Copy the committed seed into place before invoking init.
+  const seedSrc = join(__dirname, 'fixtures/seed.jsonl');
+  const beadsDir = join(projectDir, '.beads');
+  await mkdir(beadsDir, { recursive: true });
+  await copyFile(seedSrc, join(beadsDir, 'issues.jsonl'));
+
   const init = spawnSync(
     'bd',
     [
       'init',
       '--from-jsonl',
-      seedPath,
       '--non-interactive',
       '--skip-agents',
       '--skip-hooks',

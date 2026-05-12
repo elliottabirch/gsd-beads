@@ -8,6 +8,7 @@ import type {
   RootNamedDocKey,
   StateWriteOutcome,
 } from 'get-shit-done-cc/adapters/types.js';
+import { UnsupportedCapabilityError } from 'get-shit-done-cc/adapters/types.js';
 import type {
   AppendEvent,
   MutationEvent,
@@ -15,6 +16,8 @@ import type {
 } from 'get-shit-done-cc/adapters/state-event-types.js';
 import { beadsCapabilities } from './capabilities.js';
 import { NotYetImplementedError } from './errors.js';
+import { ensureBd, type BeadsRuntimeState } from './init.js';
+import * as P from './primitives.js';
 
 /**
  * BeadsAdapter — StorageAdapter implementation against `bd` CLI v1.0.3.
@@ -41,44 +44,103 @@ export class BeadsAdapter implements StorageAdapter {
     }
   }
 
-  // Bin A — record
-  async getRecord(_path: string): Promise<string | null> { throw new NotYetImplementedError('getRecord', 'Plan 06-05'); }
-  async putRecord(_path: string, _body: string): Promise<void> { throw new NotYetImplementedError('putRecord', 'Plan 06-05'); }
-  async removeRecord(_path: string): Promise<void> { throw new NotYetImplementedError('removeRecord', 'Plan 06-05'); }
-  async removeCollection(_prefix: string): Promise<void> { throw new NotYetImplementedError('removeCollection', 'Plan 06-05'); }
-  async listCollection(_prefix: string, _filter?: RecordFilter): Promise<RecordRef[]> { throw new NotYetImplementedError('listCollection', 'Plan 06-05'); }
-  async exists(_path: string): Promise<boolean> { throw new NotYetImplementedError('exists', 'Plan 06-05'); }
-  async stat(_path: string): Promise<{ kind: 'file' | 'dir'; mtime?: string } | null> { throw new NotYetImplementedError('stat', 'Plan 06-05'); }
+  /**
+   * Lazy bd-managed state cache. Populated by the first `_ensureBd()` call
+   * on this instance; reused thereafter. Disk-tier primitives skip the probe
+   * entirely (they do not call `_ensureBd`).
+   */
+  private _state: BeadsRuntimeState | null = null;
+
+  /**
+   * BEADS-04 runtime probe entrypoint. Delegates to `ensureBd()` in
+   * `./init.ts`. Throws `BdManagedMismatchError` (code=PROJECT_BD_MANAGED_MISMATCH)
+   * on non-bd dirs.
+   */
+  protected async _ensureBd(): Promise<BeadsRuntimeState> {
+    this._state = await ensureBd(this.projectRoot, this._state);
+    return this._state;
+  }
+
+  private _ensure = (): Promise<BeadsRuntimeState> => this._ensureBd();
+
+  // Bin A — record (delegates to ./primitives.ts)
+  async getRecord(path: string): Promise<string | null> {
+    return P.getRecord(this.projectRoot, this._ensure, path);
+  }
+  async putRecord(path: string, body: string): Promise<void> {
+    return P.putRecord(this.projectRoot, this._ensure, path, body);
+  }
+  async removeRecord(path: string): Promise<void> {
+    return P.removeRecord(this.projectRoot, this._ensure, path);
+  }
+  async removeCollection(prefix: string): Promise<void> {
+    return P.removeCollection(this.projectRoot, this._ensure, prefix);
+  }
+  async listCollection(prefix: string, filter?: RecordFilter): Promise<RecordRef[]> {
+    return P.listCollection(this.projectRoot, this._ensure, prefix, filter);
+  }
+  async exists(path: string): Promise<boolean> {
+    return P.exists(this.projectRoot, this._ensure, path);
+  }
+  async stat(path: string): Promise<{ kind: 'file' | 'dir'; mtime?: string } | null> {
+    return P.stat(this.projectRoot, this._ensure, path);
+  }
 
   // Bin A — section
-  async getSection(_path: string, _anchor: string): Promise<string | null> { throw new NotYetImplementedError('getSection', 'Plan 06-05'); }
-  async updateSection(_path: string, _anchor: string, _body: string, _mode: SectionMode): Promise<void> { throw new NotYetImplementedError('updateSection', 'Plan 06-05'); }
+  async getSection(path: string, anchor: string): Promise<string | null> {
+    return P.getSection(this.projectRoot, this._ensure, path, anchor);
+  }
+  async updateSection(path: string, anchor: string, body: string, mode: SectionMode): Promise<void> {
+    return P.updateSection(this.projectRoot, this._ensure, path, anchor, body, mode);
+  }
 
   // Bin A — frontmatter
-  async getFrontmatter(_path: string, _field?: string): Promise<unknown> { throw new NotYetImplementedError('getFrontmatter', 'Plan 06-05'); }
-  async updateFrontmatter(_path: string, _field: string, _value: unknown): Promise<void> { throw new NotYetImplementedError('updateFrontmatter', 'Plan 06-05'); }
-  async mergeFrontmatter(_path: string, _patch: Record<string, unknown>): Promise<void> { throw new NotYetImplementedError('mergeFrontmatter', 'Plan 06-05'); }
+  async getFrontmatter(path: string, field?: string): Promise<unknown> {
+    return P.getFrontmatter(this.projectRoot, this._ensure, path, field);
+  }
+  async updateFrontmatter(path: string, field: string, value: unknown): Promise<void> {
+    return P.updateFrontmatter(this.projectRoot, this._ensure, path, field, value);
+  }
+  async mergeFrontmatter(path: string, patch: Record<string, unknown>): Promise<void> {
+    return P.mergeFrontmatterFn(this.projectRoot, this._ensure, path, patch);
+  }
 
   // markdownLockfile group — BeadsAdapter intentionally does NOT support (capability declared false)
-  async replaceInCurrentMilestone(_pattern: string | RegExp, _replacement: string): Promise<void> { throw new NotYetImplementedError('replaceInCurrentMilestone', 'Plan 06-05 (throws UnsupportedCapabilityError)'); }
-  async readModifyWriteRoadmapMd(_mutator: (content: string) => string): Promise<void> { throw new NotYetImplementedError('readModifyWriteRoadmapMd', 'Plan 06-05 (throws UnsupportedCapabilityError)'); }
+  async replaceInCurrentMilestone(_pattern: string | RegExp, _replacement: string): Promise<void> {
+    throw new UnsupportedCapabilityError('markdownLockfile', 'beads');
+  }
+  async readModifyWriteRoadmapMd(_mutator: (content: string) => string): Promise<void> {
+    throw new UnsupportedCapabilityError('markdownLockfile', 'beads');
+  }
 
   // Foundational primitives
-  async writeBinaryAsset(_path: string, _bytes: Uint8Array): Promise<void> { throw new NotYetImplementedError('writeBinaryAsset', 'Plan 06-05 (throws UnsupportedCapabilityError per D-BINARY)'); }
+  async writeBinaryAsset(_path: string, _bytes: Uint8Array): Promise<void> {
+    // D-BINARY: capabilities.binaryAsset === false; throw fork's typed error.
+    throw new UnsupportedCapabilityError('binaryAsset', 'beads');
+  }
   async snapshot(): Promise<string> { throw new NotYetImplementedError('snapshot', 'Plan 06-06'); }
   async restore(_snapshotId: string): Promise<void> { throw new NotYetImplementedError('restore', 'Plan 06-06'); }
   async withTransaction<T>(_fn: () => Promise<T>): Promise<T> { throw new NotYetImplementedError('withTransaction', 'Plan 06-06'); }
 
   putNamedDoc(category: 'root', key: RootNamedDocKey, body: string, opts?: { workstream?: string }): Promise<void>;
   putNamedDoc(category: Exclude<NamedDocCategory, 'root'>, key: string, body: string, opts?: { workstream?: string }): Promise<void>;
-  async putNamedDoc(_category: NamedDocCategory, _key: string, _body: string, _opts?: { workstream?: string }): Promise<void> {
-    throw new NotYetImplementedError('putNamedDoc', 'Plan 06-05');
+  async putNamedDoc(
+    category: NamedDocCategory,
+    key: string,
+    body: string,
+    opts?: { workstream?: string },
+  ): Promise<void> {
+    return P.putNamedDoc(this.projectRoot, this._ensure, category, key, body, opts);
   }
 
   getNamedDoc(category: 'root', key: RootNamedDocKey, opts?: { workstream?: string }): Promise<string | null>;
   getNamedDoc(category: Exclude<NamedDocCategory, 'root'>, key: string, opts?: { workstream?: string }): Promise<string | null>;
-  async getNamedDoc(_category: NamedDocCategory, _key: string, _opts?: { workstream?: string }): Promise<string | null> {
-    throw new NotYetImplementedError('getNamedDoc', 'Plan 06-05');
+  async getNamedDoc(
+    category: NamedDocCategory,
+    key: string,
+    opts?: { workstream?: string },
+  ): Promise<string | null> {
+    return P.getNamedDoc(this.projectRoot, this._ensure, category, key, opts);
   }
 
   async commitPlanningState(_message: string, _files?: string[]): Promise<void> { throw new NotYetImplementedError('commitPlanningState', 'Plan 06-06'); }
