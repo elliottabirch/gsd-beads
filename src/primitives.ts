@@ -27,11 +27,12 @@ import {
   rmSync,
   readdirSync,
   unlinkSync,
+  realpathSync,
 } from 'node:fs';
 import {
   resolve as pathResolve,
   sep as pathSep,
-  relative as pathRelative,
+  dirname as pathDirname,
 } from 'node:path';
 import type {
   RecordRef,
@@ -59,7 +60,18 @@ import { materializeGraphJson } from './dep-graph.js';
  *   - absolute paths (e.g. `/etc/passwd`)
  *   - `..` escapes (e.g. `../../etc/passwd`)
  *   - Windows-style escapes (e.g. `..\..\windows\system32`)
- *   - any symlink-resolved path that escapes root
+ *   - any symlink-resolved path that escapes root (CR-01-A hardening)
+ *
+ * Symlink hardening (CR-01-A, REVIEW 06 CR-01 follow-up):
+ *   `path.resolve()` is a lexical operation and does NOT follow symlinks.
+ *   An intermediate component that is a symlink pointing OUTSIDE `projectRoot`
+ *   would pass the lexical `startsWith(root + pathSep)` check but the actual
+ *   syscall (writeFileSync/readFileSync) follows the symlink to the escape
+ *   target. To close this gap we canonicalize the deepest EXISTING ancestor
+ *   of `abs` via `realpathSync` and verify it remains inside `realpathSync(root)`.
+ *   Non-existent tail components cannot be symlinks yet (a TOCTOU window
+ *   remains between this check and the follow-up syscall, but that is the
+ *   same window MarkdownAdapter accepts).
  *
  * Legitimate nested paths whose canonical form remains inside root are
  * allowed. Callers obtain the absolute path from the return value.
@@ -67,13 +79,6 @@ import { materializeGraphJson } from './dep-graph.js';
 export function _abs(projectRoot: string, relPath: string): string {
   if (typeof relPath !== 'string' || relPath.length === 0) {
     throw new TypeError("BeadsAdapter: path must be a non-empty string");
-  }
-  const root = pathResolve(projectRoot);
-  const abs = pathResolve(projectRoot, relPath);
-  if (abs !== root && !abs.startsWith(root + pathSep)) {
-    throw new TypeError(
-      `BeadsAdapter: path '${relPath}' escapes projectRoot '${root}'`,
-    );
   }
   // Reject absolute paths explicitly even if they resolve inside root — the
   // `_abs()` contract is relative-path only. This catches the case where a
@@ -88,6 +93,44 @@ export function _abs(projectRoot: string, relPath: string): string {
   if (looksAbsolute) {
     throw new TypeError(
       `BeadsAdapter: absolute path '${relPath}' is not allowed (use relative path)`,
+    );
+  }
+  const lexicalRoot = pathResolve(projectRoot);
+  const abs = pathResolve(projectRoot, relPath);
+  if (abs !== lexicalRoot && !abs.startsWith(lexicalRoot + pathSep)) {
+    throw new TypeError(
+      `BeadsAdapter: path '${relPath}' escapes projectRoot '${lexicalRoot}'`,
+    );
+  }
+  // CR-01-A: canonicalize the deepest existing ancestor and re-check
+  // containment against the canonicalized root. This rejects paths that
+  // lexically stay inside `projectRoot` but resolve through a symlink
+  // component whose target is outside.
+  let canonicalRoot: string;
+  try {
+    canonicalRoot = realpathSync(lexicalRoot);
+  } catch {
+    // If projectRoot itself cannot be canonicalized (e.g. doesn't exist yet),
+    // fall back to the lexical form. This is safe: a non-existent root
+    // cannot contain attacker-controlled symlinks.
+    canonicalRoot = lexicalRoot;
+  }
+  // Walk upward from `abs` to find the deepest ancestor that already exists,
+  // then realpath THAT. Components beneath the deepest-existing ancestor
+  // are necessarily non-existent (so cannot be symlinks at this instant).
+  let probe = abs;
+  while (probe !== pathDirname(probe) && !existsSync(probe)) {
+    probe = pathDirname(probe);
+  }
+  let canonical: string;
+  try {
+    canonical = existsSync(probe) ? realpathSync(probe) : probe;
+  } catch {
+    canonical = probe;
+  }
+  if (canonical !== canonicalRoot && !canonical.startsWith(canonicalRoot + pathSep)) {
+    throw new TypeError(
+      `BeadsAdapter: path '${relPath}' resolves via symlink outside projectRoot '${canonicalRoot}'`,
     );
   }
   return abs;
@@ -463,6 +506,3 @@ export async function getNamedDoc(
 // Exported for test-only access to the path composer (not part of the
 // public contract).
 export { _namedDocPath };
-// Unused-import suppression: keep `pathRelative` reserved for future symlink
-// boundary checks in `_abs()` (Plan 06-07 hardening).
-void pathRelative;
