@@ -189,13 +189,29 @@ export function queueOrRun(
 /**
  * Outcome A withTransaction. See file-header JSDoc for semantics.
  *
- * `dryRun` (optional) discards the buffer unconditionally on exit — never
- * replays. Satisfies pipeline.ts dry-run requirement.
+ * `dryRun` (optional, OUTERMOST CALL ONLY) discards the buffer
+ * unconditionally on exit — never replays. Satisfies pipeline.ts
+ * dry-run requirement.
  *
  * CR-04 fix: transaction state lives in an `AsyncLocalStorage` context, NOT
  * on the BdRunner. Concurrent callers issue their `withTransaction` calls
  * in DIFFERENT async flows → each gets its own isolated buffer. Nested
  * `withTransaction` inside the same flow still JOINs via ALS `getStore()`.
+ *
+ * WR-2 (iter-2) fix: a nested `withTransaction(fn, { dryRun: true })`
+ * call whose outer context is NON-dry-run is rejected with a clear
+ * `TypeError`. Previously the inner `opts.dryRun` was silently ignored
+ * — the inner call joined the outer buffer and committed when the
+ * outer committed, which is the OPPOSITE of what `dryRun: true` asks
+ * for. Callers composing dry-run "probe" helpers inside real
+ * transactions would get real writes. The fail-loud Option (a) per
+ * REVIEW.md: callers must own the dry-run semantic at the outermost
+ * level (move it to the root call, or split the nested logic). Option
+ * (b), per-depth buffer partitioning, is more complex and deferred to
+ * Phase 6.1 if pipeline needs emerge.
+ *
+ * Nested calls WITHOUT `opts.dryRun` (the common reentry case) are
+ * unaffected — they JOIN the outer buffer as before.
  */
 export async function withTransaction<T>(
   state: BeadsRuntimeState,
@@ -210,6 +226,26 @@ export async function withTransaction<T>(
   // ambient context's BdRunner to match — a stray ALS context from another
   // adapter is treated as "no active txn" and we open a fresh root.
   if (existing && existing.bd === bd && !existing.finalizing) {
+    // WR-2 (iter-2): nested dryRun is a semantic conflict. An inner
+    // `dryRun: true` cannot be honored when joining a non-dry-run
+    // outer buffer (ops would queue to the outer and commit on outer
+    // exit — the opposite of dry-run semantics). Honoring it would
+    // require per-depth buffer partitioning (deferred). For now we
+    // REJECT LOUDLY so the caller moves dryRun to the outermost call
+    // or splits the inner logic. If the OUTER is itself dryRun, the
+    // inner dryRun is redundant but compatible — silently accept (the
+    // inner's ops discard with the outer's on commit anyway).
+    if (opts?.dryRun && !existing.dryRun) {
+      throw new TypeError(
+        "BeadsAdapter.withTransaction: { dryRun: true } cannot be nested " +
+          "inside a non-dryRun transaction. The inner ops would queue to the " +
+          "outer buffer and commit when the outer commits, violating dry-run " +
+          "semantics. Move `dryRun: true` to the outermost withTransaction " +
+          "call, or restructure so the inner logic runs outside the outer " +
+          "transaction. (Per-depth buffer partitioning is tracked as a " +
+          "Phase 6.1 follow-up.)",
+      );
+    }
     existing.depth++;
     try {
       return await fn();
