@@ -58,6 +58,7 @@ import type { StateWriteOutcome } from 'get-shit-done-cc/adapters/types.js';
 import type { BeadsRuntimeState } from './init.js';
 import { BeadsEmpty, BeadsUnavailableError } from './bd/errors.js';
 import { withTransaction, queueOrRun, isTxnActive, peekBuffer } from './txn.js';
+import type { BufferedOp } from './txn.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -168,6 +169,22 @@ function _bdRecallOrNull(state: BeadsRuntimeState, key: string): string | null {
 }
 
 /**
+ * Shared predicate: does this buffered op represent a `bd remember ...
+ * --key <key>` write against `key`? Extracted as a helper so call-sites
+ * agree on the guard (WR-04 fix — the pre-fix `todo_count_update` path
+ * did an unguarded `op.args[op.args.indexOf('--key') + 1] === key`,
+ * which evaluated `op.args[0] === key` when `--key` was absent and
+ * quietly decayed to matching the literal 'remember' argv slot).
+ */
+function _rememberOpMatchesKey(op: BufferedOp, key: string): boolean {
+  if (op.kind !== 'remember') return false;
+  // argv shape: ['remember', '<payload>', '--key', '<key>']
+  const keyIdx = op.args.indexOf('--key');
+  if (keyIdx === -1 || keyIdx + 1 >= op.args.length) return false;
+  return op.args[keyIdx + 1] === key;
+}
+
+/**
  * Check whether the buffer of the currently-active txn (if any) already
  * contains an op that would dedupe against the given key. Mirrors the
  * "own-writes-visible-during-txn" invariant the MarkdownAdapter shadow-dir
@@ -178,13 +195,7 @@ function _bdRecallOrNull(state: BeadsRuntimeState, key: string): string | null {
  */
 function _bufferContainsRememberKey(state: BeadsRuntimeState, key: string): boolean {
   if (!isTxnActive(state.bd)) return false;
-  return peekBuffer(state.bd).some((op) => {
-    if (op.kind !== 'remember') return false;
-    // argv shape: ['remember', '<payload>', '--key', '<key>']
-    const keyIdx = op.args.indexOf('--key');
-    if (keyIdx === -1 || keyIdx + 1 >= op.args.length) return false;
-    return op.args[keyIdx + 1] === key;
-  });
+  return peekBuffer(state.bd).some((op) => _rememberOpMatchesKey(op, key));
 }
 
 function _bufferContainsCommentFor(
@@ -415,11 +426,14 @@ export async function recordStateMutation(
           // If the buffer has an identical pending write with the SAME payload,
           // dedupe. With a different payload, the subsequent remember replaces
           // the buffered entry on commit (bd remember is update-in-place).
-          const bufOps = peekBuffer(state.bd).filter(
-            (op) =>
-              op.kind === 'remember' &&
-              op.args.length >= 4 &&
-              op.args[op.args.indexOf('--key') + 1] === key,
+          // WR-04 fix: reuse the shared `_rememberOpMatchesKey` helper so the
+          // guard matches `_bufferContainsRememberKey`. The pre-fix inline
+          // filter called `op.args[op.args.indexOf('--key') + 1] === key`
+          // without checking that `--key` was actually present, which
+          // silently matched `op.args[0]` (the literal `'remember'` argv
+          // slot) when `--key` was missing.
+          const bufOps = peekBuffer(state.bd).filter((op) =>
+            _rememberOpMatchesKey(op, key),
           );
           const lastBufPayload = bufOps.length > 0 ? bufOps[bufOps.length - 1]!.args[1] : null;
           if (lastBufPayload === payloadJson) {
