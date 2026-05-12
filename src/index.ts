@@ -19,6 +19,7 @@ import { NotYetImplementedError } from './errors.js';
 import { ensureBd, type BeadsRuntimeState } from './init.js';
 import * as P from './primitives.js';
 import * as T from './txn.js';
+import * as E from './events.js';
 
 /**
  * BeadsAdapter — StorageAdapter implementation against `bd` CLI v1.0.3.
@@ -156,10 +157,20 @@ export class BeadsAdapter implements StorageAdapter {
 
   async commitPlanningState(_message: string, _files?: string[]): Promise<void> { throw new NotYetImplementedError('commitPlanningState', 'Plan 06-06'); }
 
-  // Event families (D-01/D-04) — return StateWriteOutcome per D-2026-05-10-08
-  async recordStateAppend(_event: AppendEvent): Promise<StateWriteOutcome> { throw new NotYetImplementedError('recordStateAppend', 'Plan 06-06'); }
-  async recordStateMutation(_event: MutationEvent): Promise<StateWriteOutcome> { throw new NotYetImplementedError('recordStateMutation', 'Plan 06-06'); }
-  async recordStateSignal(_event: SignalEvent): Promise<StateWriteOutcome> { throw new NotYetImplementedError('recordStateSignal', 'Plan 06-06'); }
+  // Event families (D-01/D-04) — return StateWriteOutcome per D-2026-05-10-08.
+  // Dispatch per D-MAPPING Outcome A (DECISIONS.md D-2026-05-12-OQ06-MAPPING).
+  async recordStateAppend(event: AppendEvent): Promise<StateWriteOutcome> {
+    const state = await this._ensureBd();
+    return E.recordStateAppend(state, event);
+  }
+  async recordStateMutation(event: MutationEvent): Promise<StateWriteOutcome> {
+    const state = await this._ensureBd();
+    return E.recordStateMutation(state, event);
+  }
+  async recordStateSignal(event: SignalEvent): Promise<StateWriteOutcome> {
+    const state = await this._ensureBd();
+    return E.recordStateSignal(state, event);
+  }
 }
 
 export default BeadsAdapter;
