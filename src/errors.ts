@@ -1,9 +1,22 @@
 /**
- * Sentinel errors for BeadsAdapter. Plan 06-01: minimal scaffold
- * (NotYetImplementedError only). Plan 06-02 ports sibling's
- * BeadsCause enum + subclasses and adds BdManagedMismatchError
- * per D-INIT-ERR.
+ * Sentinel errors for BeadsAdapter. Plan 06-01 scaffold established
+ * NotYetImplementedError. Plan 06-02 port adds the bd-CLI sentinel
+ * hierarchy + BdManagedMismatchError (D-INIT-ERR, BEADS-04); they
+ * live in `./bd/errors.ts` and are re-exported here so external
+ * consumers (`import { BdManagedMismatchError } from 'gsd-beads'`)
+ * don't reach into src/bd/.
  */
+
+export {
+  BeadsCause,
+  BeadsUnavailableError,
+  BeadsNotInstalled,
+  BeadsCorrupt,
+  BeadsVersionMismatch,
+  BeadsEmpty,
+  BdManagedMismatchError,
+} from './bd/errors.js';
+export type { BeadsCauseValue } from './bd/errors.js';
 
 export class NotYetImplementedError extends Error {
   override readonly name = 'NotYetImplementedError';
