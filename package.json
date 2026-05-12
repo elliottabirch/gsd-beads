@@ -37,12 +37,18 @@
     "get-shit-done-cc": "*"
   },
   "peerDependenciesMeta": {
-    "get-shit-done-cc": { "optional": true }
+    "get-shit-done-cc": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22",
     "get-shit-done-cc": "file:../get-shit-done",
-    "vitest": "^4.1.6",
     "typescript": "^5",
-    "@types/node": "^22"
+    "vitest": "^4.1.6"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.1"
   }
 }

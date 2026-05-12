@@ -1,5 +1,7 @@
-// src/format/section.mjs
+// src/format/section.ts
 // Section parser/locator/rewriter for path-slug-addressed markdown sections.
+// Ported from sibling src/format/section.mjs (130 LOC) during Plan 06-04.
+//
 // Implements PRIM-01 + PRIM-02 (Bin A getSection/updateSection) per Phase 7
 // decisions:
 //   - D-05: anchor is a heading-text slug (lowercase, hyphen-separated)
@@ -15,10 +17,8 @@
 /**
  * GitHub-style ASCII slugify (subset). Per D-05.
  * Underscore is NOT stripped (truth contract: 'foo_bar_baz' → 'foo-bar-baz').
- * @param {string} text
- * @returns {string} slug
  */
-export function slugify(text) {
+export function slugify(text: string): string {
   return String(text)
     .replace(/[`*~]/g, '')             // strip markdown emphasis (NOT underscore)
     .toLowerCase()
@@ -35,35 +35,43 @@ export function slugify(text) {
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
 const FENCE_RE = /^```/;
 
+export type SectionMode = 'overwrite' | 'append' | 'prepend';
+
+export interface SectionLocation {
+  /** 0-based heading line index */
+  headingLine: number;
+  /** 1-6 */
+  headingLevel: number;
+  /** 0-based line AFTER heading (inclusive) */
+  bodyStart: number;
+  /** 0-based line BEFORE next sibling heading (exclusive) */
+  bodyEnd: number;
+  /** join of [bodyStart..bodyEnd) with '\n' */
+  bodyText: string;
+}
+
 /**
  * Locate a section by path-slug.
  *
- * @param {string} text    full file contents
- * @param {string} anchor  path-slug like 'phase-7/decisions/d-01' or '/decisions'
- * @returns {{
- *   headingLine: number,    // 0-based heading line index
- *   headingLevel: number,   // 1-6
- *   bodyStart: number,      // 0-based line AFTER heading (inclusive)
- *   bodyEnd: number,        // 0-based line BEFORE next sibling heading (exclusive)
- *   bodyText: string,       // join of [bodyStart..bodyEnd) with '\n'
- * } | null}
+ * @param text   full file contents
+ * @param anchor path-slug like 'phase-7/decisions/d-01' or '/decisions'
  */
-export function locateSection(text, anchor) {
+export function locateSection(text: string, anchor: string): SectionLocation | null {
   const target = anchor.replace(/^\/+/, '').split('/').filter(Boolean);
   if (!target.length) return null;
   const lines = text.split('\n');
-  const stack = [];
+  const stack: string[] = [];
   let inFence = false;
   let foundLine = -1, foundLevel = -1;
 
   for (let i = 0; i < lines.length; i++) {
-    if (FENCE_RE.test(lines[i])) { inFence = !inFence; continue; }
+    if (FENCE_RE.test(lines[i]!)) { inFence = !inFence; continue; }
     if (inFence) continue;
-    const m = HEADING_RE.exec(lines[i]);
+    const m = HEADING_RE.exec(lines[i]!);
     if (!m) continue;
-    const level = m[1].length;
+    const level = m[1]!.length;
     stack.length = level;
-    stack[level - 1] = slugify(m[2]);
+    stack[level - 1] = slugify(m[2]!);
     const path = stack.slice(0, level).filter(Boolean);
     if (
       path.length === target.length &&
@@ -79,10 +87,10 @@ export function locateSection(text, anchor) {
   let bodyEnd = lines.length;
   inFence = false;
   for (let j = foundLine + 1; j < lines.length; j++) {
-    if (FENCE_RE.test(lines[j])) { inFence = !inFence; continue; }
+    if (FENCE_RE.test(lines[j]!)) { inFence = !inFence; continue; }
     if (inFence) continue;
-    const m = HEADING_RE.exec(lines[j]);
-    if (m && m[1].length <= foundLevel) { bodyEnd = j; break; }
+    const m = HEADING_RE.exec(lines[j]!);
+    if (m && m[1]!.length <= foundLevel) { bodyEnd = j; break; }
   }
   return {
     headingLine: foundLine,
@@ -96,20 +104,25 @@ export function locateSection(text, anchor) {
 /**
  * Rewrite a section. The heading line itself is NEVER modified (D-07).
  *
- * @param {string} text
- * @param {string} anchor
- * @param {string} body                          new content
- * @param {'overwrite'|'append'|'prepend'} mode
- * @returns {string}                             new full text
+ * @param text   full file contents
+ * @param anchor path-slug (see locateSection)
+ * @param body   new content
+ * @param mode   overwrite | append | prepend
+ * @returns new full text
  * @throws {Error} if anchor not found or mode is unknown
  */
-export function rewriteSection(text, anchor, body, mode) {
+export function rewriteSection(
+  text: string,
+  anchor: string,
+  body: string,
+  mode: SectionMode,
+): string {
   const loc = locateSection(text, anchor);
   if (!loc) throw new Error(`section not found: ${anchor}`);
   const lines = text.split('\n');
   const bodyLines = body.split('\n');
 
-  let head, mid, tail;
+  let head: string[], mid: string[], tail: string[];
   if (mode === 'overwrite') {
     head = lines.slice(0, loc.bodyStart);
     mid = bodyLines;
@@ -123,7 +136,7 @@ export function rewriteSection(text, anchor, body, mode) {
     mid = bodyLines;
     tail = lines.slice(loc.bodyStart);
   } else {
-    throw new Error(`unknown mode: ${mode}`);
+    throw new Error(`unknown mode: ${mode as string}`);
   }
   return [...head, ...mid, ...tail].join('\n');
 }
