@@ -20,10 +20,22 @@
  *     rolled back on error. Documented here and on MarkdownAdapter's Outcome
  *     C analog; acceptable per Phase 6 scope.
  *
- * Reentrancy:
- *   - Nested `withTransaction` JOINS the outer buffer (matches MarkdownAdapter
- *     shadow-dir reentrancy — Phase 5 D-04/D-10). Nested commit is a no-op;
- *     only the outer-most call replays the buffer.
+ * Concurrency & reentrancy (CR-04 fix — AsyncLocalStorage):
+ *   - Transaction context is stored in `AsyncLocalStorage` (node:async_hooks),
+ *     NOT on the BdRunner instance. Every concurrent `withTransaction` call
+ *     issued WITHOUT awaiting the previous one spawns its OWN async context
+ *     with its OWN buffer — callers no longer share state across the `await`
+ *     boundary. This fixes the CR-04 contamination hazard the previous
+ *     WeakMap-keyed implementation had.
+ *   - Nested `withTransaction` INSIDE the same async flow (e.g. a helper
+ *     calling another adapter method that also wraps withTransaction) still
+ *     JOINS the outer buffer — ALS's `getStore()` surfaces the ambient
+ *     context, so depth-tracked reentry works as before.
+ *   - Rationale for ALS over an async mutex: correctness by construction +
+ *     preserves parallelism (mutex would serialize concurrent callers) +
+ *     matches the Node ecosystem idiom (express/fastify/OpenTelemetry) +
+ *     Phase 7 conformance parity with MarkdownAdapter's filesystem-lock
+ *     (both isolate correctly, one per-context, one per-PID).
  *
  * Mid-txn partial-commit gap (Deferred-04, Phase 6.1):
  *   - If the commit phase fails after k-of-N ops applied, bd is left with
@@ -31,12 +43,9 @@
  *     these back — no snapshot was taken. The commit phase surfaces a
  *     structured `BeadsPartialCommitError` with {committedOps, failedOp,
  *     remainingOps} so callers can decide recovery policy.
- *
- * BdRunner identity:
- *   - Active txn state is keyed by `BdRunner` instance (WeakMap). Each
- *     BeadsAdapter constructs a single BdRunner via `_ensureBd`, so a
- *     per-adapter transaction context is the result.
  */
+
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { BdRunner, BdRunOptions } from './bd/helper.js';
 import type { BeadsRuntimeState } from './init.js';
@@ -56,7 +65,10 @@ export interface BufferedOp {
 }
 
 /**
- * Per-adapter transaction context. `depth === 0` means no active txn.
+ * Ambient transaction context carried through the async-hooks graph.
+ * `depth` tracks nested `withTransaction` calls within the SAME async flow
+ * (e.g. an adapter method that calls another adapter method that also wraps
+ * `withTransaction`). Only the outer-most call (`depth === 1`) commits.
  */
 interface TxnContext {
   depth: number;
@@ -65,6 +77,10 @@ interface TxnContext {
   dryRun: boolean;
   /** True once commit/rollback has begun; guards against re-entry weirdness. */
   finalizing: boolean;
+  /** The BdRunner this context belongs to. Used by peek/queue helpers to
+   *  tolerate stale ALS contexts from unrelated adapter instances (edge
+   *  case: a test that constructs two adapters and interleaves calls). */
+  bd: BdRunner;
 }
 
 /**
@@ -109,17 +125,35 @@ export class BeadsPartialCommitError extends Error {
   }
 }
 
-/** BdRunner → active TxnContext map. One entry max per adapter. */
-const txnStacks = new WeakMap<BdRunner, TxnContext>();
+/**
+ * Ambient transaction context. Propagated automatically through async
+ * awaits, timers, promises, etc. by `node:async_hooks` AsyncLocalStorage.
+ */
+const txnStorage = new AsyncLocalStorage<TxnContext>();
 
 /**
- * Is a transaction currently active on this BdRunner? Consumers of
- * events.ts use this (indirectly via `queueOrRun`) to decide whether to
- * buffer an op or pass it through.
+ * Return the currently-active transaction context for `bd`, or `undefined`
+ * if none is active in THIS async flow. The `bd` parameter guards against
+ * a stray ALS context leaking from an unrelated adapter instance — if the
+ * ambient context belongs to a different BdRunner, we treat it as "no txn
+ * active for this adapter" (callers fall through to direct bd execution).
+ */
+function _currentCtxFor(bd: BdRunner): TxnContext | undefined {
+  const ctx = txnStorage.getStore();
+  if (!ctx) return undefined;
+  if (ctx.bd !== bd) return undefined;
+  if (ctx.depth <= 0) return undefined;
+  if (ctx.finalizing) return undefined;
+  return ctx;
+}
+
+/**
+ * Is a transaction currently active on this BdRunner in the current async
+ * flow? Consumers of events.ts use this (indirectly via `queueOrRun`) to
+ * decide whether to buffer an op or pass it through.
  */
 export function isTxnActive(bd: BdRunner): boolean {
-  const ctx = txnStacks.get(bd);
-  return ctx !== undefined && ctx.depth > 0 && !ctx.finalizing;
+  return _currentCtxFor(bd) !== undefined;
 }
 
 /**
@@ -128,8 +162,7 @@ export function isTxnActive(bd: BdRunner): boolean {
  * consult pending writes for "read-your-own-writes" within a txn.
  */
 export function peekBuffer(bd: BdRunner): readonly BufferedOp[] {
-  const ctx = txnStacks.get(bd);
-  return ctx?.buffer ?? [];
+  return _currentCtxFor(bd)?.buffer ?? [];
 }
 
 /**
@@ -145,8 +178,8 @@ export function queueOrRun(
   args: string[],
   opts?: BdRunOptions,
 ): unknown {
-  const ctx = txnStacks.get(bd);
-  if (ctx && ctx.depth > 0 && !ctx.finalizing) {
+  const ctx = _currentCtxFor(bd);
+  if (ctx) {
     ctx.buffer.push({ kind, args, opts });
     return undefined;
   }
@@ -158,6 +191,11 @@ export function queueOrRun(
  *
  * `dryRun` (optional) discards the buffer unconditionally on exit — never
  * replays. Satisfies pipeline.ts dry-run requirement.
+ *
+ * CR-04 fix: transaction state lives in an `AsyncLocalStorage` context, NOT
+ * on the BdRunner. Concurrent callers issue their `withTransaction` calls
+ * in DIFFERENT async flows → each gets its own isolated buffer. Nested
+ * `withTransaction` inside the same flow still JOINs via ALS `getStore()`.
  */
 export async function withTransaction<T>(
   state: BeadsRuntimeState,
@@ -165,88 +203,80 @@ export async function withTransaction<T>(
   opts?: { dryRun?: boolean },
 ): Promise<T> {
   const bd = state.bd;
-  let ctx = txnStacks.get(bd);
-  const dryRun = opts?.dryRun ?? false;
+  const existing = txnStorage.getStore();
 
-  if (!ctx) {
-    ctx = { depth: 0, buffer: [], dryRun: false, finalizing: false };
-    txnStacks.set(bd, ctx);
-  }
-
-  // Reentrant JOIN: nested withTransaction calls share the outer buffer.
-  // The outer-most call owns commit/rollback.
-  if (ctx.depth > 0) {
-    ctx.depth++;
+  // Reentry: nested withTransaction in the SAME async context (not merely
+  // the same adapter instance) JOINs the outer buffer. We require the
+  // ambient context's BdRunner to match — a stray ALS context from another
+  // adapter is treated as "no active txn" and we open a fresh root.
+  if (existing && existing.bd === bd && !existing.finalizing) {
+    existing.depth++;
     try {
       return await fn();
     } finally {
-      ctx.depth--;
+      existing.depth--;
     }
   }
 
-  // Outer-most call: allocate a fresh buffer.
-  ctx.depth = 1;
-  ctx.buffer = [];
-  ctx.dryRun = dryRun;
-  ctx.finalizing = false;
+  // Root txn: fresh context scoped to this async flow.
+  const ctx: TxnContext = {
+    depth: 1,
+    buffer: [],
+    dryRun: opts?.dryRun ?? false,
+    finalizing: false,
+    bd,
+  };
 
-  let result: T;
-  try {
-    result = await fn();
-  } catch (e) {
-    // Rollback: discard buffer. bd store never received these ops — no-op.
-    ctx.finalizing = true;
-    ctx.buffer = [];
-    ctx.depth = 0;
-    ctx.dryRun = false;
-    ctx.finalizing = false;
-    throw e;
-  }
-
-  // Commit phase — replay buffer unless dry-run.
-  ctx.finalizing = true;
-  const ops = ctx.buffer;
-  const total = ops.length;
-
-  if (ctx.dryRun) {
-    // Discard buffer; do NOT replay. Matches MarkdownAdapter Phase 5 D-05.
-    ctx.buffer = [];
-    ctx.depth = 0;
-    ctx.dryRun = false;
-    ctx.finalizing = false;
-    return result;
-  }
-
-  // Replay ops in order. Direct bd.run() — must bypass queueOrRun since the
-  // outer txn is finalizing.
-  let committed = 0;
-  for (let i = 0; i < total; i++) {
-    const op = ops[i]!;
+  return txnStorage.run(ctx, async () => {
+    let result: T;
     try {
-      bd.run(op.args, op.opts);
-      committed++;
+      result = await fn();
     } catch (e) {
-      // Clear state BEFORE throwing so a caller's catch can reliably
-      // observe isTxnActive(bd) === false.
+      // Rollback: discard buffer. bd store never received these ops — no-op.
+      ctx.finalizing = true;
       ctx.buffer = [];
       ctx.depth = 0;
-      ctx.dryRun = false;
-      ctx.finalizing = false;
-      throw new BeadsPartialCommitError({
-        committedOps: committed,
-        failedOp: i,
-        remainingOps: total - i - 1,
-        failedKind: op.kind,
-        cause: e,
-      });
+      throw e;
     }
-  }
 
-  ctx.buffer = [];
-  ctx.depth = 0;
-  ctx.dryRun = false;
-  ctx.finalizing = false;
-  return result;
+    // Commit phase — replay buffer unless dry-run.
+    ctx.finalizing = true;
+    const ops = ctx.buffer;
+    const total = ops.length;
+
+    if (ctx.dryRun) {
+      // Discard buffer; do NOT replay. Matches MarkdownAdapter Phase 5 D-05.
+      ctx.buffer = [];
+      ctx.depth = 0;
+      return result;
+    }
+
+    // Replay ops in order. Direct bd.run() — safe because `finalizing` is
+    // true so any nested queueOrRun would see `_currentCtxFor` return
+    // undefined and execute directly.
+    let committed = 0;
+    for (let i = 0; i < total; i++) {
+      const op = ops[i]!;
+      try {
+        bd.run(op.args, op.opts);
+        committed++;
+      } catch (e) {
+        ctx.buffer = [];
+        ctx.depth = 0;
+        throw new BeadsPartialCommitError({
+          committedOps: committed,
+          failedOp: i,
+          remainingOps: total - i - 1,
+          failedKind: op.kind,
+          cause: e,
+        });
+      }
+    }
+
+    ctx.buffer = [];
+    ctx.depth = 0;
+    return result;
+  });
 }
 
 /**
