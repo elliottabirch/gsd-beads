@@ -18,6 +18,7 @@ import { beadsCapabilities } from './capabilities.js';
 import { NotYetImplementedError } from './errors.js';
 import { ensureBd, type BeadsRuntimeState } from './init.js';
 import * as P from './primitives.js';
+import * as T from './txn.js';
 
 /**
  * BeadsAdapter — StorageAdapter implementation against `bd` CLI v1.0.3.
@@ -118,9 +119,19 @@ export class BeadsAdapter implements StorageAdapter {
     // D-BINARY: capabilities.binaryAsset === false; throw fork's typed error.
     throw new UnsupportedCapabilityError('binaryAsset', 'beads');
   }
-  async snapshot(): Promise<string> { throw new NotYetImplementedError('snapshot', 'Plan 06-06'); }
-  async restore(_snapshotId: string): Promise<void> { throw new NotYetImplementedError('restore', 'Plan 06-06'); }
-  async withTransaction<T>(_fn: () => Promise<T>): Promise<T> { throw new NotYetImplementedError('withTransaction', 'Plan 06-06'); }
+  // Capability-gated per D-2026-05-12-OQ06-TXN (D-TXN Outcome A): no dedicated
+  // snapshot/restore. These throw UnsupportedCapabilityError; capabilities.snapshot
+  // === false, so hasSnapshot(adapter) returns false and strict consumers skip.
+  async snapshot(): Promise<string> {
+    throw new UnsupportedCapabilityError('snapshot', 'beads');
+  }
+  async restore(_snapshotId: string): Promise<void> {
+    throw new UnsupportedCapabilityError('snapshot', 'beads');
+  }
+  async withTransaction<U>(fn: () => Promise<U>): Promise<U> {
+    const state = await this._ensureBd();
+    return T.withTransaction(state, fn);
+  }
 
   putNamedDoc(category: 'root', key: RootNamedDocKey, body: string, opts?: { workstream?: string }): Promise<void>;
   putNamedDoc(category: Exclude<NamedDocCategory, 'root'>, key: string, body: string, opts?: { workstream?: string }): Promise<void>;
