@@ -252,5 +252,11 @@ function emitEventSection<E extends { type: string; payload: unknown }>(
     appended.push(...newBodyLines);
     appended.push('');
   }
-  return appended.join('\n') + (body.endsWith('\n') ? '' : '');
+  // WR-02 fix: preserve trailing newline when the original body had one.
+  // The previous expression `(body.endsWith('\n') ? '' : '')` returned ''
+  // on both branches — a tautology that always dropped the trailing
+  // newline on section-append, causing round-trip byte drift for any
+  // STATE.md that originally ended with '\n' (git diffs, POSIX text-file
+  // discipline).
+  return appended.join('\n') + (body.endsWith('\n') ? '\n' : '');
 }
