@@ -1,19 +1,42 @@
-// src/helpers/deriveDiskStatus.mjs
+// src/helpers/deriveDiskStatus.ts
+// Ported from sibling src/helpers/deriveDiskStatus.mjs (v0.2 Phase 5
+// deliverable, D-07 priority chain). Direct TS port — priority-chain
+// ordering preserved verbatim against sibling's `.mjs` body.
+//
+// History: `git log --follow src/helpers/deriveDiskStatus.ts` traces back
+// through the .mjs origin.
+
+export type DiskStatus =
+  | 'no_directory'
+  | 'complete'
+  | 'partial'
+  | 'planned'
+  | 'researched'
+  | 'discussed'
+  | 'empty';
+
+export interface DiskStatusInput {
+  planCount: number;
+  summaryCount: number;
+  hasContext: boolean;
+  hasResearch: boolean;
+  dirExists: boolean;
+}
+
 /**
- * D-07: 7-value disk_status enum priority chain.
+ * D-07: 7-value disk_status enum with priority chain.
  *
- * Carry-forward from archive/v0.2-shadow/bin/gsd-sdk-shadow.mjs:305-313.
- * Phase 5 deliverable; unchanged in Phase 6 (D-11 verbatim extraction).
+ * planCount/summaryCount are bd-derived (D-06); hasContext/hasResearch are
+ * disk-derived. Priority order (first match wins):
  *
- * See `git log --follow archive/v0.2-shadow/bin/gsd-sdk-shadow.mjs` for
- * the original ship history.
+ *   no_directory → complete → partial → planned → researched → discussed → empty
  *
- * planCount/summaryCount come from bd (D-06); hasContext/hasResearch from disk.
- * Priority: no_directory → complete → partial → planned → researched → discussed → empty.
- * @param {{planCount:number, summaryCount:number, hasContext:boolean, hasResearch:boolean, dirExists:boolean}} opts
- * @returns {'complete'|'partial'|'planned'|'researched'|'discussed'|'empty'|'no_directory'}
+ * Sibling semantics preserved verbatim — in particular `summaryCount > 0`
+ * alone (without planCount > 0) still returns 'partial', matching sibling's
+ * behavior for orphan-summary detection.
  */
-export function deriveDiskStatus({ planCount, summaryCount, hasContext, hasResearch, dirExists }) {
+export function deriveDiskStatus(input: DiskStatusInput): DiskStatus {
+  const { planCount, summaryCount, hasContext, hasResearch, dirExists } = input;
   if (!dirExists) return 'no_directory';
   if (planCount > 0 && summaryCount >= planCount) return 'complete';
   if (summaryCount > 0) return 'partial';
