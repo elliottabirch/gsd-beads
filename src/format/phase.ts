@@ -1,5 +1,7 @@
-// src/format/phase.mjs
+// src/format/phase.ts
 // Bidirectional parser/formatter for ROADMAP.md phase titles + descriptions.
+// Ported from sibling src/format/phase.mjs (251 LOC) during Plan 06-04.
+//
 // Implements ARCH-03 (REQUIREMENTS.md) per Phase 6 decisions:
 //   - D-14: 4 named exports — parsePhaseTitle / formatPhaseTitle /
 //           parsePhaseDescription / formatPhaseDescription
@@ -10,7 +12,6 @@
 //           "Plans:" tail with checkboxes) round-trips byte-equal but is
 //           not structurally parsed; Phase 8's phasePlanIndex derives
 //           plan data from bd children, not from this view
-//   - D-17: 11 fixture files at tests/unit/fixtures/phase-format/
 
 // -----------------------------------------------------------------------
 // Title parsing/formatting
@@ -24,30 +25,30 @@
  */
 const TITLE_RE = /^Phase\s+(\d+(?:\.\d+)?)\s*:\s*(.+?)\s*$/;
 
+export interface PhaseTitle {
+  number: string;
+  name: string;
+}
+
 /**
  * Parses "Phase N: Name" (or "Phase N.M: Name" for decimal phases).
  *
- * @param {string} line
- * @returns {{ number: string, name: string }}
  * @throws {Error} if line doesn't match the title pattern
  */
-export function parsePhaseTitle(line) {
+export function parsePhaseTitle(line: string): PhaseTitle {
   const m = TITLE_RE.exec(line);
   if (!m) {
     throw new Error(
-      `parsePhaseTitle: not a phase title: ${JSON.stringify(line)}`
+      `parsePhaseTitle: not a phase title: ${JSON.stringify(line)}`,
     );
   }
-  return { number: m[1], name: m[2] };
+  return { number: m[1]!, name: m[2]! };
 }
 
 /**
  * Formats { number, name } back to "Phase N: Name" (no trailing newline).
- *
- * @param {{ number: string, name: string }} parsed
- * @returns {string}
  */
-export function formatPhaseTitle({ number, name }) {
+export function formatPhaseTitle({ number, name }: PhaseTitle): string {
   return `Phase ${number}: ${name}`;
 }
 
@@ -59,7 +60,12 @@ export function formatPhaseTitle({ number, name }) {
 // that looks like a `**Foo**:` label (e.g., `**Status:**`, `**Plans:**`)
 // is treated either as continuation of the current section or — for
 // `**Plans...` specifically — as the start of the opaque tail per D-16.
-const SECTIONS = ['Goal', 'Depends on', 'Requirements', 'Success Criteria'];
+const SECTIONS = ['Goal', 'Depends on', 'Requirements', 'Success Criteria'] as const;
+type SectionKey = typeof SECTIONS[number];
+
+function isSectionKey(s: string): s is SectionKey {
+  return (SECTIONS as readonly string[]).includes(s);
+}
 
 /**
  * Tolerates both `**Foo**:` and `**Foo:**` styles (codebase uses both)
@@ -82,31 +88,30 @@ const TAIL_RE = /^\s*\*\*Plans\b/;
 // SC items use `<n>. <text>` (with optional leading whitespace).
 const SC_ITEM_RE = /^\s*(\d+)\.\s+(.*)$/;
 
+export interface PhaseDescription {
+  goal: string;
+  depends_on: string;
+  requirements: string;
+  success_criteria: string[];
+  tail: string;
+}
+
 /**
  * Parses a phase description body into structured form.
- *
- * @param {string} body
- * @returns {{
- *   goal: string,
- *   depends_on: string,
- *   requirements: string,
- *   success_criteria: string[],
- *   tail: string
- * }}
  */
-export function parsePhaseDescription(body) {
+export function parsePhaseDescription(body: string): PhaseDescription {
   const lines = body.split('\n');
-  const sections = {
+  const sections: Record<SectionKey, string> = {
     Goal: '',
     'Depends on': '',
     Requirements: '',
     'Success Criteria': '',
   };
-  let current = null; // current SECTIONS-recognized section, or null
-  let tailStart = null; // index of first tail line, or null
+  let current: SectionKey | null = null; // current SECTIONS-recognized section, or null
+  let tailStart: number | null = null; // index of first tail line, or null
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
 
     // First check: did we just hit the opaque tail? Tail begins at the
     // first `**Plans` line AFTER we've opened any SECTIONS-recognized
@@ -118,9 +123,9 @@ export function parsePhaseDescription(body) {
     }
 
     const m = LABEL_RE.exec(line);
-    if (m && SECTIONS.includes(m[1])) {
+    if (m && isSectionKey(m[1]!)) {
       // New canonical section starts.
-      current = m[1];
+      current = m[1] as SectionKey;
       sections[current] = m[2] ?? '';
       continue;
     }
@@ -147,7 +152,7 @@ export function parsePhaseDescription(body) {
   }
 
   // Trim trailing whitespace on every section.
-  for (const k of Object.keys(sections)) {
+  for (const k of Object.keys(sections) as SectionKey[]) {
     sections[k] = sections[k].replace(/\s+$/, '');
   }
 
@@ -175,18 +180,15 @@ export function parsePhaseDescription(body) {
  * (lines without a leading number) are joined with their item, leading
  * whitespace stripped so subsequent re-formatting can re-add canonical
  * indent without growing it on each round-trip.
- *
- * @param {string} sc
- * @returns {string[]}
  */
-function parseScItems(sc) {
-  const out = [];
-  let curItem = null;
+function parseScItems(sc: string): string[] {
+  const out: string[] = [];
+  let curItem: string | null = null;
   for (const line of sc.split('\n')) {
     const m = SC_ITEM_RE.exec(line);
     if (m) {
       if (curItem !== null) out.push(curItem);
-      curItem = m[2];
+      curItem = m[2]!;
     } else if (curItem !== null && line.trim() !== '') {
       // Continuation line within an item — strip leading whitespace so
       // canonical re-indent during format() is idempotent.
@@ -204,17 +206,8 @@ function parseScItems(sc) {
  * Whitespace and label-style normalization are PERMITTED (the canonical
  * label form is `**Foo**:` and SC items use 2-space indent + numeric
  * prefix). Tail is emitted verbatim per D-16.
- *
- * @param {{
- *   goal: string,
- *   depends_on: string,
- *   requirements: string,
- *   success_criteria: string[],
- *   tail: string
- * }} parsed
- * @returns {string}
  */
-export function formatPhaseDescription(parsed) {
+export function formatPhaseDescription(parsed: PhaseDescription): string {
   const {
     goal = '',
     depends_on = '',
@@ -223,7 +216,7 @@ export function formatPhaseDescription(parsed) {
     tail = '',
   } = parsed;
 
-  const out = [];
+  const out: string[] = [];
   out.push(`**Goal**: ${goal}`);
   out.push('');
   out.push(`**Depends on**: ${depends_on}`);
@@ -232,7 +225,7 @@ export function formatPhaseDescription(parsed) {
   out.push('');
   out.push('**Success Criteria** (what must be TRUE):');
   for (let idx = 0; idx < success_criteria.length; idx++) {
-    const item = success_criteria[idx];
+    const item = success_criteria[idx]!;
     const itemLines = item.split('\n');
     out.push(`  ${idx + 1}. ${itemLines[0]}`);
     // Continuation lines: 5-space indent (so number-prefix column lines up
