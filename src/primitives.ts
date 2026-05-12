@@ -442,6 +442,31 @@ export async function getFrontmatter(
   return frontmatter;
 }
 
+/**
+ * WR-06 runtime guard: the public `updateFrontmatter` and
+ * `mergeFrontmatterFn` accept `unknown`, but `formatFrontmatter` (+
+ * js-yaml's `dump`) require JSON-serializable values. A caller who
+ * hands us a function, Symbol, or circular-reference object would
+ * cause `dump` to either throw mid-write (half-written frontmatter on
+ * disk) or emit a `!!js/function` tag that subsequent `load` calls
+ * reject (unparseable YAML on read).
+ *
+ * `JSON.stringify` round-trip is a cheap, battle-tested way to reject
+ * functions, Symbols, and circulars before they reach the YAML
+ * serializer. It's permissive for BigInt (which JSON.stringify rejects
+ * but YAML CAN emit) — for our FrontmatterValue domain that's
+ * acceptable; BigInts are out of contract.
+ */
+function _assertFrontmatterSerializable(v: unknown, context: string): void {
+  try {
+    JSON.stringify(v);
+  } catch (e) {
+    throw new TypeError(
+      `BeadsAdapter.${context}: value is not JSON-serializable (functions / Symbols / circular refs rejected): ${String(e)}`,
+    );
+  }
+}
+
 export async function updateFrontmatter(
   projectRoot: string,
   ensure: () => Promise<BeadsRuntimeState>,
@@ -449,6 +474,7 @@ export async function updateFrontmatter(
   field: string,
   value: unknown,
 ): Promise<void> {
+  _assertFrontmatterSerializable(value, 'updateFrontmatter');
   const text = (await getRecord(projectRoot, ensure, path)) ?? '';
   const { frontmatter, body } = parseFrontmatter(text);
   (frontmatter as Record<string, FrontmatterValue>)[field] = value as FrontmatterValue;
@@ -462,6 +488,7 @@ export async function mergeFrontmatterFn(
   path: string,
   patch: Record<string, unknown>,
 ): Promise<void> {
+  _assertFrontmatterSerializable(patch, 'mergeFrontmatter');
   const text = (await getRecord(projectRoot, ensure, path)) ?? '';
   const { frontmatter, body } = parseFrontmatter(text);
   const merged = mergeFrontmatter(
