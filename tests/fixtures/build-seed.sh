@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Source-of-truth bash script for tests/fixtures/seed.jsonl.
+# Source-of-truth bash script for src/testing/fixtures/seed.jsonl.
 # CONVENTION (Pitfall 7): seed.jsonl is regenerated from this script,
 # NOT hand-edited. PRs change THIS file + commit the regenerated JSONL.
 #
-# Output: tests/fixtures/seed.jsonl (multi-milestone bd state)
+# Canonical output: src/testing/fixtures/seed.jsonl (ships in dist/testing/)
+# (Phase 7 Plan 07-03: relocated from the old tests/fixtures/ location)
 #   - v0.1: 2 phases (phase-id:01..02), all closed
 #   - v0.2: 7 phases (phase-id:03..09), in-progress (open) + 24 plan children
 #   - v0.3: 2 phases (phase-id:10..11), planned (open)
@@ -174,8 +175,8 @@ BEADS_ACTOR=seed bd remember "Beads-backed reads" --key "gsd-beads:milestone:v0.
 # ---------------------------------------------------------------------------
 # Export to canonical JSONL (committed)
 # ---------------------------------------------------------------------------
-BEADS_ACTOR=seed bd export --json -o "$REPO_ROOT/tests/fixtures/seed.jsonl" >/dev/null
-echo "[build-seed] seed.jsonl regenerated at $REPO_ROOT/tests/fixtures/seed.jsonl"
+BEADS_ACTOR=seed bd export --json -o "$REPO_ROOT/src/testing/fixtures/seed.jsonl" >/dev/null
+echo "[build-seed] seed.jsonl regenerated at $REPO_ROOT/src/testing/fixtures/seed.jsonl"
 echo "[build-seed] IDs: P11=$P11 P12=$P12 P21=$P21 P22=$P22 P23=$P23 P31=$P31 P32=$P32"
 echo "[build-seed] New v0.2: P24=$P24 P25=$P25 P26=$P26 P27=$P27"
 echo "[build-seed] Phase-ids: 01(P11) 02(P12) 03(P21) 04(P22) 05(P23) 06(P24) 07(P25) 08(P26) 09(P27) 10(P31) 11(P32)"

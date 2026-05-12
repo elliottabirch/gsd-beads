@@ -51,7 +51,7 @@ export async function setupFreshAdapter(): Promise<FreshAdapterHandle> {
   // bd v1.0.4: `--from-jsonl` is a boolean flag; the seed file must pre-exist
   // at `.beads/issues.jsonl` in the project dir before `bd init` runs.
   // Copy the committed seed into place before invoking init.
-  const seedSrc = join(__dirname, 'fixtures/seed.jsonl');
+  const seedSrc = join(__dirname, '../src/testing/fixtures/seed.jsonl');
   const beadsDir = join(projectDir, '.beads');
   await mkdir(beadsDir, { recursive: true });
   await copyFile(seedSrc, join(beadsDir, 'issues.jsonl'));
