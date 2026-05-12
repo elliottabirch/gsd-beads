@@ -36,16 +36,28 @@ npm test           # vitest run (conformance + smoke)
 
 ## bd CLI dependency
 
-Every plan after 06-02 requires `bd` on PATH. The sibling's empirical Phase-7
-work pinned v1.0.3 (`1b2dd2cb`); the author's current install is v1.0.4. Plan
-06-03 spike re-verifies landmines against the installed build before any
-plan-06-05+ work lands.
+**Minimum supported version: bd v1.0.4** (LOCKED at Plan 06-03 Task-4
+human-verify checkpoint, 2026-05-12).
+
+v1.0.3 is NOT supported. BeadsAdapter's D-MAPPING Outcome A depends on the
+`bd update --metadata <json>` + `bd update --set-metadata <k>=<v>` primitives
+introduced in v1.0.4. The `bd init --from-jsonl` invocation shape also
+changed between v1.0.3 and v1.0.4 (v1.0.4 requires the JSONL at the exact
+relative path `.beads/issues.jsonl` inside the target directory, NOT at an
+arbitrary absolute path). BeadsAdapter `init()` (Plan 06-05) probes
+`bd --version` at construction and rejects v1.0.3 or older via
+`BeadsVersionMismatch`.
 
 ```bash
-bd --version   # prints: bd v1.0.3 (or compatible point release); currently v1.0.4 locally
+bd --version   # must be v1.0.4 or later; currently bd version 1.0.4 (Homebrew)
 ```
 
-Plan 06-03 spike fail-fasts on `command -v bd` missing.
+Plan 06-03 spike fail-fasts on `command -v bd` missing. For detailed
+v1.0.3 vs v1.0.4 behavior differences, see the fork's
+`.planning/phases/06-beadsadapter-implementation/06-03-SPIKE-RESULTS.md §1`
+(CLI catalog), `§2` (new `--metadata` primitive), `§4.2` (`bd init
+--from-jsonl` shape change), and `§5.1` (`bd comments add --label`
+v1.0.3 silent-drop → v1.0.4 hard-reject exit 1).
 
 ## Post-reset scaffold state (what is actually present on this commit)
 

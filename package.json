@@ -1,7 +1,7 @@
 {
   "name": "gsd-beads",
   "version": "1.0.0-alpha.0",
-  "description": "BeadsAdapter implementation of the get-shit-done StorageAdapter contract; targets bd v1.0.3.",
+  "description": "BeadsAdapter implementation of the get-shit-done StorageAdapter contract; requires bd v1.0.4+.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,6 +22,10 @@
   ],
   "engines": {
     "node": ">=22.0.0"
+  },
+  "bd": {
+    "minVersion": "1.0.4",
+    "note": "Runtime-enforced by BeadsAdapter.init() via `bd --version` probe (Plan 06-05). v1.0.3 rejected: missing `--metadata` primitive (D-MAPPING Outcome A) + incompatible `bd init --from-jsonl` invocation shape. See D-2026-05-12-OQ06-MAPPING + D-2026-05-12-OQ06-TXN ADRs in the fork's .planning/DECISIONS.md."
   },
   "scripts": {
     "build": "tsc",
