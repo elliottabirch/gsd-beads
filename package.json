@@ -11,6 +11,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./testing": {
+      "import": "./dist/testing/conformance-factory.js",
+      "types": "./dist/testing/conformance-factory.d.ts",
+      "default": "./dist/testing/conformance-factory.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -28,10 +33,10 @@
     "note": "Runtime-enforced by BeadsAdapter.init() via `bd --version` probe (Plan 06-05). v1.0.3 rejected: missing `--metadata` primitive (D-MAPPING Outcome A) + incompatible `bd init --from-jsonl` invocation shape. See D-2026-05-12-OQ06-MAPPING + D-2026-05-12-OQ06-TXN ADRs in the fork's .planning/DECISIONS.md."
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/testing/fixtures && cp src/testing/fixtures/seed.jsonl dist/testing/fixtures/seed.jsonl",
     "test": "vitest run",
     "test:unit": "vitest run tests/smoke",
-    "test:conformance": "vitest run tests/conformance.test.ts"
+    "test:conformance": "echo 'D-05: conformance invocation moved to fork paired harness (Plan 07-04)'"
   },
   "peerDependencies": {
     "get-shit-done-cc": "*"
