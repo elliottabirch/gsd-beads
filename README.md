@@ -160,6 +160,23 @@ categories currently dispatched:
 | `<named-doc-category>/<key>` | disk | `.planning/<category>/[<workstream>/]<key>` via putNamedDoc |
 | other `.md`/`.json` | per-path routing | canonical-file router per `resolveRoute()` in paths.ts |
 
+## Fork-side paired conformance
+
+The `./testing` subpath export provides a factory that the fork
+(`get-shit-done`) consumes for paired conformance testing:
+
+```ts
+import { createBeadsAdapter } from 'gsd-beads/testing';
+import { runAdapterConformanceSuite } from 'get-shit-done-cc/conformance';
+
+runAdapterConformanceSuite('beads', createBeadsAdapter);
+```
+
+The factory encodes bd v1.0.4 init discipline (git init, seed
+pre-stage, `BEADS_ACTOR=seed`, `chmod 0o700`) as a single source
+of truth. See Phase 7 Plan 07-03 in the fork's `.planning/` tree
+for the extraction rationale and the canonical invariants list.
+
 ## Known limitations (v1.0)
 
 - `writeBinaryAsset` throws `UnsupportedCapabilityError` — consumer

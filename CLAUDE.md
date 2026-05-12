@@ -123,6 +123,24 @@ Deferred:
   under shipped D-TXN Outcome A (no snapshot impl); only applies if
   Phase 6.1 migrates to Outcome C.
 
+## Phase 7 testing subpath export
+
+The `./testing` subpath re-exports `createBeadsAdapter(projectDir)`
+from `src/testing/conformance-factory.ts`. This is the ONLY supported
+way to construct a BeadsAdapter for conformance testing — direct
+`new BeadsAdapter(dir)` without the factory's bd init block WILL
+fail with `project_bd_managed_mismatch` (BEADS-04).
+
+Landmines encoded in the factory (do NOT duplicate in test code):
+  - Landmine 11: `BEADS_ACTOR=seed` env on every bd invocation.
+  - Landmine 9:  `chmod 0o700` on `.beads/` post-init.
+  - bd v1.0.4:   `--from-jsonl` is a boolean flag; the seed file
+                 MUST pre-exist at `.beads/issues.jsonl` before
+                 `bd init` runs.
+
+The pre-Phase-7 `tests/conformance.test.ts` is deleted (D-05);
+fork CI owns paired conformance.
+
 ## Phase 6 implementation status
 
 - [x] Plan 06-01 — scaffold + fork-side contract changes (graphEdges,
