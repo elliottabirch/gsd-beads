@@ -100,6 +100,13 @@ export async function materializeGraphJson(bd: BdRunner): Promise<string> {
       // spike-014 filter: `type === 'blocks'` (NOT dependency_type).
       if (d.type !== 'blocks') continue;
       if (typeof d.depends_on_id !== 'string' || d.depends_on_id.length === 0) continue;
+      // WR-09 defensive filter: skip self-loops (`depends_on_id === issue.id`).
+      // Spike-014 says cascade walks IGNORE `blocks` edges so a self-loop on
+      // `blocks` won't wedge cascade today, but the emitted `graph.json` is
+      // consumed by graphify.cjs for MarkdownAdapter + pipeline dry-run, which
+      // may not defensively handle self-loops. Filter at the synthesizer tier
+      // so downstream consumers never see one.
+      if (d.depends_on_id === issue.id) continue;
       edges.push({
         from: d.depends_on_id, // blocker direction (spike-014)
         to: issue.id!,          // blocked issue
