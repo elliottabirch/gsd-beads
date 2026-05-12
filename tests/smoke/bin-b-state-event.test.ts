@@ -15,7 +15,10 @@ import { describe, it, expect } from 'vitest';
 import { setupFreshAdapter } from '../fixture.js';
 
 describe('state-event category smoke (SC#3 — BEADS-02)', () => {
-  it('cross-family workflow: decision append + blocker mutation + waiting/resume signals', async () => {
+  // Extended timeout: 5 sequential bd spawns under full-sweep dolt-lock
+  // saturation. Standalone run completes in ~14s; under the full
+  // tests/smoke/ sweep the cross-family chain can exceed the 30s default.
+  it('cross-family workflow: decision append + blocker mutation + waiting/resume signals', { timeout: 60_000 }, async () => {
     const h = await setupFreshAdapter();
     try {
       // 1. recordStateAppend (decision — low-freq bd remember)

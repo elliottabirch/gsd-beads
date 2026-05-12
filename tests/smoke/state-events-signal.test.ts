@@ -86,5 +86,5 @@ describe('BeadsAdapter.recordStateSignal — D-MAPPING Outcome A (BEADS-02)', ()
     } finally {
       await h.cleanup();
     }
-  }, 30_000);
+  }, 60_000);
 });

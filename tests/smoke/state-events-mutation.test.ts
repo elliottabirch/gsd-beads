@@ -49,7 +49,7 @@ describe('BeadsAdapter.recordStateMutation — D-MAPPING Outcome A (BEADS-02)', 
     } finally {
       await h.cleanup();
     }
-  }, 30_000);
+  }, 60_000);
 
   it("blocker_resolved before blocker_added → nothing_to_remove", async () => {
     const h = await setupFreshAdapter();
