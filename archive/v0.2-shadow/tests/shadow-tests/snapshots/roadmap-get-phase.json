@@ -1,8 +1,0 @@
-{
-  "found": true,
-  "phase_number": "5",
-  "phase_name": "progress reads",
-  "goal": "progress.json + progress + progress.bar + progress.table.",
-  "success_criteria": [],
-  "section": "### Phase 5: progress reads\n\n**Goal:** progress.json + progress + progress.bar + progress.table.\n**Depends on:** Phase 4"
-}

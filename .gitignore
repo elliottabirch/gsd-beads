@@ -1,2 +1,5 @@
+node_modules
+dist
 # Bead store (local user data, auto-managed by bd)
 .beads/
+tmp

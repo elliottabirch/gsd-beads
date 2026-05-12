@@ -1,0 +1,341 @@
+/**
+ * withTransaction + snapshot + restore — D-TXN Outcome A (in-memory buffer).
+ *
+ * Per Plan 06-03 SPIKE-RESULTS §7 and DECISIONS.md
+ * `D-2026-05-12-OQ06-TXN`: BeadsAdapter ships Outcome A (in-memory write
+ * buffer). Outcome B (store-clone + bookmark) is INFEASIBLE in bd v1.0.4
+ * (`bd dolt` lacks `clone/branch/bookmark`). Outcome C (file-snapshot via
+ * `bd export` + `bd init --from-jsonl`) is feasible but rejected by user
+ * override for scope-simplicity reasons. Outcome A documented mid-txn
+ * partial-commit gap → Phase 6.1 follow-up (Deferred-04).
+ *
+ * Capabilities:
+ *   - transaction: true  (buffer doubles as dry-run — pipeline.ts needs it)
+ *   - snapshot:    false (Outcome A has no dedicated snapshot/restore)
+ *
+ * Scope:
+ *   - bd-tier writes are buffered during an active txn; replayed on commit;
+ *     discarded on rollback.
+ *   - disk-tier writes (atomicWriteFile) pass THROUGH directly and are NOT
+ *     rolled back on error. Documented here and on MarkdownAdapter's Outcome
+ *     C analog; acceptable per Phase 6 scope.
+ *
+ * Concurrency & reentrancy (CR-04 fix — AsyncLocalStorage):
+ *   - Transaction context is stored in `AsyncLocalStorage` (node:async_hooks),
+ *     NOT on the BdRunner instance. Every concurrent `withTransaction` call
+ *     issued WITHOUT awaiting the previous one spawns its OWN async context
+ *     with its OWN buffer — callers no longer share state across the `await`
+ *     boundary. This fixes the CR-04 contamination hazard the previous
+ *     WeakMap-keyed implementation had.
+ *   - Nested `withTransaction` INSIDE the same async flow (e.g. a helper
+ *     calling another adapter method that also wraps withTransaction) still
+ *     JOINS the outer buffer — ALS's `getStore()` surfaces the ambient
+ *     context, so depth-tracked reentry works as before.
+ *   - Rationale for ALS over an async mutex: correctness by construction +
+ *     preserves parallelism (mutex would serialize concurrent callers) +
+ *     matches the Node ecosystem idiom (express/fastify/OpenTelemetry) +
+ *     Phase 7 conformance parity with MarkdownAdapter's filesystem-lock
+ *     (both isolate correctly, one per-context, one per-PID).
+ *
+ * Mid-txn partial-commit gap (Deferred-04, Phase 6.1):
+ *   - If the commit phase fails after k-of-N ops applied, bd is left with
+ *     ops 1..k applied and ops (k+1)..N unapplied. Outcome A cannot roll
+ *     these back — no snapshot was taken. The commit phase surfaces a
+ *     structured `BeadsPartialCommitError` with {committedOps, failedOp,
+ *     remainingOps} so callers can decide recovery policy.
+ */
+
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+import type { BdRunner, BdRunOptions } from './bd/helper.js';
+import type { BeadsRuntimeState } from './init.js';
+
+/**
+ * A single buffered bd operation. Stored as raw argv so commit is a straight
+ * replay through BdRunner.run(). Callers that need structured inspection can
+ * also peek at `kind` for dedupe purposes during an active txn.
+ */
+export interface BufferedOp {
+  /** Human-readable tag — 'comments.add', 'remember', 'forget', 'update.metadata', etc. */
+  kind: string;
+  /** Raw argv handed to `bd`. */
+  args: string[];
+  /** Options to pass to BdRunner.run (primarily `parseJson`). */
+  opts?: BdRunOptions;
+}
+
+/**
+ * Ambient transaction context carried through the async-hooks graph.
+ * `depth` tracks nested `withTransaction` calls within the SAME async flow
+ * (e.g. an adapter method that calls another adapter method that also wraps
+ * `withTransaction`). Only the outer-most call (`depth === 1`) commits.
+ */
+interface TxnContext {
+  depth: number;
+  buffer: BufferedOp[];
+  /** True on the outer-most call when a dry-run was requested. */
+  dryRun: boolean;
+  /** True once commit/rollback has begun; guards against re-entry weirdness. */
+  finalizing: boolean;
+  /** The BdRunner this context belongs to. Used by peek/queue helpers to
+   *  tolerate stale ALS contexts from unrelated adapter instances (edge
+   *  case: a test that constructs two adapters and interleaves calls). */
+  bd: BdRunner;
+}
+
+/**
+ * Structured partial-commit error surfaced when commit-phase replay fails
+ * mid-way. Callers can inspect to decide on manual recovery. Matches the
+ * SPIKE-RESULTS §7 "Mid-txn commit failure" recommendation.
+ */
+export class BeadsPartialCommitError extends Error {
+  override readonly name = 'BeadsPartialCommitError';
+  readonly __brand = 'BeadsPartialCommitError' as const;
+  readonly committedOps: number;
+  readonly failedOp: number;
+  readonly remainingOps: number;
+  readonly failedKind: string;
+  override readonly cause?: unknown;
+
+  constructor(args: {
+    committedOps: number;
+    failedOp: number;
+    remainingOps: number;
+    failedKind: string;
+    cause?: unknown;
+  }) {
+    super(
+      `BeadsAdapter withTransaction: commit failed after ${args.committedOps}/${args.committedOps + args.remainingOps + 1} ops. ` +
+        `Failing op: #${args.failedOp} (${args.failedKind}). ${args.remainingOps} ops not applied. ` +
+        `bd store is in a PARTIALLY-COMMITTED state (Outcome A known gap — Phase 6.1).`,
+    );
+    this.committedOps = args.committedOps;
+    this.failedOp = args.failedOp;
+    this.remainingOps = args.remainingOps;
+    this.failedKind = args.failedKind;
+    this.cause = args.cause;
+  }
+
+  static [Symbol.hasInstance](instance: unknown): boolean {
+    return (
+      instance != null &&
+      typeof instance === 'object' &&
+      (instance as Record<string, unknown>).__brand === 'BeadsPartialCommitError'
+    );
+  }
+}
+
+/**
+ * Ambient transaction context. Propagated automatically through async
+ * awaits, timers, promises, etc. by `node:async_hooks` AsyncLocalStorage.
+ */
+const txnStorage = new AsyncLocalStorage<TxnContext>();
+
+/**
+ * Return the currently-active transaction context for `bd`, or `undefined`
+ * if none is active in THIS async flow. The `bd` parameter guards against
+ * a stray ALS context leaking from an unrelated adapter instance — if the
+ * ambient context belongs to a different BdRunner, we treat it as "no txn
+ * active for this adapter" (callers fall through to direct bd execution).
+ */
+function _currentCtxFor(bd: BdRunner): TxnContext | undefined {
+  const ctx = txnStorage.getStore();
+  if (!ctx) return undefined;
+  if (ctx.bd !== bd) return undefined;
+  if (ctx.depth <= 0) return undefined;
+  if (ctx.finalizing) return undefined;
+  return ctx;
+}
+
+/**
+ * Is a transaction currently active on this BdRunner in the current async
+ * flow? Consumers of events.ts use this (indirectly via `queueOrRun`) to
+ * decide whether to buffer an op or pass it through.
+ */
+export function isTxnActive(bd: BdRunner): boolean {
+  return _currentCtxFor(bd) !== undefined;
+}
+
+/**
+ * Peek at the buffered ops for the active txn on this BdRunner. Returns an
+ * empty array if no txn is active. Used by recordState* dedupe logic to
+ * consult pending writes for "read-your-own-writes" within a txn.
+ */
+export function peekBuffer(bd: BdRunner): readonly BufferedOp[] {
+  return _currentCtxFor(bd)?.buffer ?? [];
+}
+
+/**
+ * Queue a bd op on the active txn, OR execute it directly if no txn is
+ * active. Returns the parsed result (undefined for queued ops, since the
+ * result is not yet available). For queued ops callers MUST NOT rely on
+ * a return value — structure your dedupe check around `peekBuffer` before
+ * calling this.
+ */
+export function queueOrRun(
+  bd: BdRunner,
+  kind: string,
+  args: string[],
+  opts?: BdRunOptions,
+): unknown {
+  const ctx = _currentCtxFor(bd);
+  if (ctx) {
+    ctx.buffer.push({ kind, args, opts });
+    return undefined;
+  }
+  return bd.run(args, opts);
+}
+
+/**
+ * Outcome A withTransaction. See file-header JSDoc for semantics.
+ *
+ * `dryRun` (optional, OUTERMOST CALL ONLY) discards the buffer
+ * unconditionally on exit — never replays. Satisfies pipeline.ts
+ * dry-run requirement.
+ *
+ * CR-04 fix: transaction state lives in an `AsyncLocalStorage` context, NOT
+ * on the BdRunner. Concurrent callers issue their `withTransaction` calls
+ * in DIFFERENT async flows → each gets its own isolated buffer. Nested
+ * `withTransaction` inside the same flow still JOINs via ALS `getStore()`.
+ *
+ * WR-2 (iter-2) fix: a nested `withTransaction(fn, { dryRun: true })`
+ * call whose outer context is NON-dry-run is rejected with a clear
+ * `TypeError`. Previously the inner `opts.dryRun` was silently ignored
+ * — the inner call joined the outer buffer and committed when the
+ * outer committed, which is the OPPOSITE of what `dryRun: true` asks
+ * for. Callers composing dry-run "probe" helpers inside real
+ * transactions would get real writes. The fail-loud Option (a) per
+ * REVIEW.md: callers must own the dry-run semantic at the outermost
+ * level (move it to the root call, or split the nested logic). Option
+ * (b), per-depth buffer partitioning, is more complex and deferred to
+ * Phase 6.1 if pipeline needs emerge.
+ *
+ * Nested calls WITHOUT `opts.dryRun` (the common reentry case) are
+ * unaffected — they JOIN the outer buffer as before.
+ */
+export async function withTransaction<T>(
+  state: BeadsRuntimeState,
+  fn: () => Promise<T>,
+  opts?: { dryRun?: boolean },
+): Promise<T> {
+  const bd = state.bd;
+  const existing = txnStorage.getStore();
+
+  // Reentry: nested withTransaction in the SAME async context (not merely
+  // the same adapter instance) JOINs the outer buffer. We require the
+  // ambient context's BdRunner to match — a stray ALS context from another
+  // adapter is treated as "no active txn" and we open a fresh root.
+  if (existing && existing.bd === bd && !existing.finalizing) {
+    // WR-2 (iter-2): nested dryRun is a semantic conflict. An inner
+    // `dryRun: true` cannot be honored when joining a non-dry-run
+    // outer buffer (ops would queue to the outer and commit on outer
+    // exit — the opposite of dry-run semantics). Honoring it would
+    // require per-depth buffer partitioning (deferred). For now we
+    // REJECT LOUDLY so the caller moves dryRun to the outermost call
+    // or splits the inner logic. If the OUTER is itself dryRun, the
+    // inner dryRun is redundant but compatible — silently accept (the
+    // inner's ops discard with the outer's on commit anyway).
+    if (opts?.dryRun && !existing.dryRun) {
+      throw new TypeError(
+        "BeadsAdapter.withTransaction: { dryRun: true } cannot be nested " +
+          "inside a non-dryRun transaction. The inner ops would queue to the " +
+          "outer buffer and commit when the outer commits, violating dry-run " +
+          "semantics. Move `dryRun: true` to the outermost withTransaction " +
+          "call, or restructure so the inner logic runs outside the outer " +
+          "transaction. (Per-depth buffer partitioning is tracked as a " +
+          "Phase 6.1 follow-up.)",
+      );
+    }
+    existing.depth++;
+    try {
+      return await fn();
+    } finally {
+      existing.depth--;
+    }
+  }
+
+  // Root txn: fresh context scoped to this async flow.
+  const ctx: TxnContext = {
+    depth: 1,
+    buffer: [],
+    dryRun: opts?.dryRun ?? false,
+    finalizing: false,
+    bd,
+  };
+
+  return txnStorage.run(ctx, async () => {
+    let result: T;
+    try {
+      result = await fn();
+    } catch (e) {
+      // Rollback: discard buffer. bd store never received these ops — no-op.
+      ctx.finalizing = true;
+      ctx.buffer = [];
+      ctx.depth = 0;
+      throw e;
+    }
+
+    // Commit phase — replay buffer unless dry-run.
+    ctx.finalizing = true;
+    const ops = ctx.buffer;
+    const total = ops.length;
+
+    if (ctx.dryRun) {
+      // Discard buffer; do NOT replay. Matches MarkdownAdapter Phase 5 D-05.
+      ctx.buffer = [];
+      ctx.depth = 0;
+      return result;
+    }
+
+    // Replay ops in order. Direct bd.run() — safe because `finalizing` is
+    // true so any nested queueOrRun would see `_currentCtxFor` return
+    // undefined and execute directly.
+    let committed = 0;
+    for (let i = 0; i < total; i++) {
+      const op = ops[i]!;
+      try {
+        bd.run(op.args, op.opts);
+        committed++;
+      } catch (e) {
+        ctx.buffer = [];
+        ctx.depth = 0;
+        throw new BeadsPartialCommitError({
+          committedOps: committed,
+          failedOp: i,
+          remainingOps: total - i - 1,
+          failedKind: op.kind,
+          cause: e,
+        });
+      }
+    }
+
+    ctx.buffer = [];
+    ctx.depth = 0;
+    return result;
+  });
+}
+
+/**
+ * `snapshot()` is NOT supported under Outcome A. The BeadsAdapter method
+ * throws `UnsupportedCapabilityError` directly; this export is a stub
+ * retained for structural symmetry so future Phase 6.1 migrations to
+ * Outcome C can swap in a real body without changing `index.ts`.
+ */
+export function snapshot(_state: BeadsRuntimeState): Promise<string> {
+  return Promise.reject(
+    new Error(
+      "BeadsAdapter.snapshot: not supported under D-TXN Outcome A (capabilities.snapshot=false). " +
+        "Phase 6.1 may migrate to Outcome C (file-snapshot). See DECISIONS.md D-2026-05-12-OQ06-TXN.",
+    ),
+  );
+}
+
+/** Mirror of `snapshot` — Phase 6.1 migration hook. */
+export function restore(_state: BeadsRuntimeState, _snapshotId: string): Promise<void> {
+  return Promise.reject(
+    new Error(
+      "BeadsAdapter.restore: not supported under D-TXN Outcome A (capabilities.snapshot=false). " +
+        "Phase 6.1 may migrate to Outcome C. See DECISIONS.md D-2026-05-12-OQ06-TXN.",
+    ),
+  );
+}

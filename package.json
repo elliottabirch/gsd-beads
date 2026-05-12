@@ -1,20 +1,37 @@
 {
   "name": "gsd-beads",
   "version": "1.0.0-alpha.0",
-  "description": "BeadsAdapter — bd-backed StorageAdapter implementation for the get-shit-done planning workflow",
+  "description": "BeadsAdapter implementation of the get-shit-done StorageAdapter contract; requires bd v1.0.4+.",
   "type": "module",
-  "main": "./src/adapter.mjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/adapter.mjs",
-    "./bd": "./src/bd/helper.mjs",
-    "./bd/errors": "./src/bd/errors.mjs",
-    "./bd/findRoot": "./src/bd/findRoot.mjs",
-    "./helpers": "./src/helpers/index.mjs",
-    "./format/phase": "./src/format/phase.mjs",
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./package.json": "./package.json"
   },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "CLAUDE.md",
+    "CONTRIBUTING.md"
+  ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.0.0"
+  },
+  "bd": {
+    "minVersion": "1.0.4",
+    "note": "Runtime-enforced by BeadsAdapter.init() via `bd --version` probe (Plan 06-05). v1.0.3 rejected: missing `--metadata` primitive (D-MAPPING Outcome A) + incompatible `bd init --from-jsonl` invocation shape. See D-2026-05-12-OQ06-MAPPING + D-2026-05-12-OQ06-TXN ADRs in the fork's .planning/DECISIONS.md."
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/smoke",
+    "test:conformance": "vitest run tests/conformance.test.ts"
   },
   "peerDependencies": {
     "get-shit-done-cc": "*"
@@ -24,17 +41,14 @@
       "optional": true
     }
   },
-  "scripts": {
-    "test": "node --test 'tests/unit/**/*.test.mjs' 'tests/conformance/**/*.test.mjs'",
-    "test:unit": "node --test 'tests/unit/**/*.test.mjs'",
-    "test:conformance": "node --test 'tests/conformance/**/*.test.mjs'",
-    "link:fork": "npm link ../get-shit-done"
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22",
+    "get-shit-done-cc": "file:../get-shit-done",
+    "typescript": "^5",
+    "vitest": "^4.1.6"
   },
-  "files": [
-    "src/",
-    "README.md",
-    "CLAUDE.md",
-    "CONTRIBUTING.md"
-  ],
-  "license": "ISC"
+  "dependencies": {
+    "js-yaml": "^4.1.1"
+  }
 }
