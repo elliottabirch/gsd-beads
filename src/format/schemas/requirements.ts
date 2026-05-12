@@ -68,8 +68,14 @@ export function parseRequirementsBody(body: string): {
 
   for (const line of lines) {
     if (/^```/.test(line)) {
+      // CR-03 fix: fence toggles are no-ops for the content arrays.
+      // The previous placeholder `push({} as never)` polluted
+      // `current.items` (RequirementItem[]) with empty objects and
+      // `proseLines` (string[]) with `{}` that later join'd as
+      // `[object Object]`. A fence-delimiting line is neither a
+      // requirement item nor prose content when inside a category;
+      // when outside a category, preserve it in prose for round-trip.
       inFence = !inFence;
-      (current ? current.items : proseLines).push({} as never); // no-op marker placeholder
       if (!current) proseLines.push(line);
       continue;
     }
