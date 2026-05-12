@@ -241,6 +241,19 @@ export async function removeRecord(
   path: string,
 ): Promise<void> {
   const route = resolveRoute(path);
+  // WR-03 fix: mirror putRecord's contract — phase-addressed bd paths
+  // (phases/NN-foo/NN-MM-PLAN.md et al.) route `tier: 'bd'` but with
+  // `label: undefined` under D-MAPPING Outcome A. Without this guard,
+  // the code falls through to the disk-tier unlink path, which either
+  // silently succeeds (the file didn't exist on disk — body was in bd)
+  // or succeeds while leaving the bd bead intact: phantom-persistence.
+  // putRecord throws on this case; removeRecord must too so the contract
+  // asymmetry (reads work, writes throw, removes no-op) is eliminated.
+  if (route.tier === 'bd' && !route.label) {
+    throw new Error(
+      `BeadsAdapter.removeRecord: phase-addressed bd removes not implemented in Bin A (Plan 06-06): ${path}`,
+    );
+  }
   if (route.tier === 'bd' && route.label) {
     const { bd } = await ensure();
     try {
@@ -273,6 +286,14 @@ export async function removeCollection(
   prefix: string,
 ): Promise<void> {
   const route = resolveRoute(prefix);
+  // WR-03 fix: see removeRecord for rationale. Phase-addressed bd prefixes
+  // must throw (parallel to putRecord) rather than silently falling through
+  // to disk-tier rmSync — phantom-persistence otherwise.
+  if (route.tier === 'bd' && !route.label) {
+    throw new Error(
+      `BeadsAdapter.removeCollection: phase-addressed bd removes not implemented in Bin A (Plan 06-06): ${prefix}`,
+    );
+  }
   if (route.tier === 'bd' && route.label) {
     const { bd } = await ensure();
     try {
