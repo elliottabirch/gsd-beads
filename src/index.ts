@@ -9,6 +9,10 @@ import type {
   StateWriteOutcome,
 } from 'get-shit-done-cc/adapters/types.js';
 import { UnsupportedCapabilityError } from 'get-shit-done-cc/adapters/types.js';
+import {
+  parseFrontmatter,
+  formatFrontmatter,
+} from './format/frontmatter.js';
 import type {
   AppendEvent,
   MutationEvent,
@@ -193,6 +197,37 @@ export class BeadsAdapter implements StorageAdapter {
   async recordStateSignal(event: SignalEvent): Promise<StateWriteOutcome> {
     const state = await this._ensureBd();
     return E.recordStateSignal(state, event);
+  }
+
+  /**
+   * D-13 (Phase 7, fork ADR D-2026-05-12-NORMALIZE):
+   * Canonicalize body as BeadsAdapter would after a putRecord →
+   * getRecord round-trip. Composes the frontmatter parser/formatter
+   * (js-yaml.dump normalizes quote style + preserves map-insertion
+   * order with sortKeys:false).
+   *
+   * Invariants:
+   *   - Pure: output depends only on `body` (category is advisory).
+   *   - Idempotent: normalize(normalize(x)) === normalize(x)
+   *     (Pitfall 3 in fork RESEARCH: catches js-yaml non-determinism).
+   *   - Deterministic across instances: constructing two
+   *     BeadsAdapters and calling normalize on each with the same
+   *     input yields byte-equal outputs.
+   *
+   * `category` is accepted for forward compatibility (Phase 8
+   * migration tool may dispatch per NamedDocCategory) but currently
+   * unused — BeadsAdapter's normalization is uniform across
+   * categories.
+   *
+   * BeadsAdapter's storage model (D-MAPPING Outcome A) stores body
+   * as a single description blob and re-parses on read; section
+   * structure is byte-preserving for sections matching the slugify
+   * contract, so an identity section round-trip is sufficient. The
+   * only lossy leg is frontmatter re-serialization via js-yaml.
+   */
+  normalize(body: string, _category?: string): string {
+    const parsed = parseFrontmatter(body);
+    return formatFrontmatter(parsed.frontmatter, parsed.body);
   }
 }
 
