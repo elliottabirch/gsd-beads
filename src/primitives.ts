@@ -451,18 +451,59 @@ export async function getFrontmatter(
  * disk) or emit a `!!js/function` tag that subsequent `load` calls
  * reject (unparseable YAML on read).
  *
- * `JSON.stringify` round-trip is a cheap, battle-tested way to reject
- * functions, Symbols, and circulars before they reach the YAML
- * serializer. It's permissive for BigInt (which JSON.stringify rejects
- * but YAML CAN emit) — for our FrontmatterValue domain that's
- * acceptable; BigInts are out of contract.
+ * WR-1 (iter-2) fix: `JSON.stringify` alone is INSUFFICIENT. It throws
+ * only on circular references and BigInt; functions and Symbols are
+ * SILENTLY stripped (`JSON.stringify({fn: () => 1}) === '{}'`), so a
+ * broken value would pass the guard and reach `js-yaml.dump`, which
+ * may emit a `!!js/function` tag — exactly the failure mode this guard
+ * was supposed to block. We now explicitly walk the object tree and
+ * throw a `TypeError` on any function or Symbol value (at any depth).
+ * The `JSON.stringify` probe is retained to catch circular references
+ * and BigInt.
+ *
+ * The walker is iterative (heap-allocated worklist) rather than
+ * recursive so a pathological deeply-nested input cannot blow the
+ * call stack before the circular-ref check runs.
  */
 function _assertFrontmatterSerializable(v: unknown, context: string): void {
+  // Explicit walk: reject function/symbol at any depth. We track visited
+  // objects to avoid infinite loops on circular structures (the
+  // JSON.stringify probe below handles circular-ref detection for the
+  // final TypeError with a clear message; the visited set here just
+  // prevents the walker itself from looping).
+  const seen = new WeakSet<object>();
+  const worklist: unknown[] = [v];
+  while (worklist.length > 0) {
+    const cur = worklist.pop();
+    const t = typeof cur;
+    if (t === 'function' || t === 'symbol') {
+      throw new TypeError(
+        `BeadsAdapter.${context}: value of type ${t} is not YAML-serializable ` +
+          `(functions and Symbols are silently dropped by JSON.stringify and would ` +
+          `produce malformed YAML via js-yaml's \`!!js/function\` tag).`,
+      );
+    }
+    if (cur && t === 'object') {
+      if (seen.has(cur as object)) continue;
+      seen.add(cur as object);
+      if (Array.isArray(cur)) {
+        for (const entry of cur) worklist.push(entry);
+      } else {
+        for (const entry of Object.values(cur as Record<string, unknown>)) {
+          worklist.push(entry);
+        }
+      }
+    }
+  }
+  // Defense-in-depth: JSON.stringify catches circular refs + BigInt
+  // values, which the walker above does NOT detect (BigInt typeof is
+  // 'bigint', not 'symbol'/'function', and we intentionally don't
+  // enumerate BigInt further).
   try {
     JSON.stringify(v);
   } catch (e) {
     throw new TypeError(
-      `BeadsAdapter.${context}: value is not JSON-serializable (functions / Symbols / circular refs rejected): ${String(e)}`,
+      `BeadsAdapter.${context}: value is not JSON-serializable (circular references or BigInt): ${String(e)}`,
     );
   }
 }
