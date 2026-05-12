@@ -84,20 +84,30 @@ async function _resolveMilestoneBead(
   state: BeadsRuntimeState,
   milestoneKey: string,
 ): Promise<string | null> {
+  // WR-01 fix: `bd list -l A -l B` semantics (AND vs OR) are not documented
+  // in bd v1.0.4's CLI help, the README, or the bd-primitive spike. If bd
+  // treats repeated `-l` as OR (union), we could resolve the WRONG milestone
+  // bead for multi-version stores. Query only the primary `gsd:milestone`
+  // label (which scopes the candidate set to milestones only) and
+  // post-filter by `version:<key>` in-process. Same number of spawns (1)
+  // as the original; the AND guarantee is now explicit in JS, not reliant
+  // on bd's flag semantics.
   try {
     const raw = state.bd.run([
       'list',
       '-l',
       'gsd:milestone',
-      '-l',
-      `version:${milestoneKey}`,
       '--json',
       '--all',
       '-n',
       '0',
     ]);
-    const items = Array.isArray(raw) ? (raw as Array<{ id: string }>) : [];
-    return items.length > 0 ? items[0]!.id : null;
+    const items = Array.isArray(raw)
+      ? (raw as Array<{ id: string; labels?: string[] }>)
+      : [];
+    const versionLabel = `version:${milestoneKey}`;
+    const match = items.find((it) => (it.labels ?? []).includes(versionLabel));
+    return match ? match.id : null;
   } catch (e) {
     if (e instanceof BeadsEmpty) return null;
     throw e;
