@@ -15,7 +15,10 @@ import type {
   SignalEvent,
 } from 'get-shit-done-cc/adapters/state-event-types.js';
 import { beadsCapabilities } from './capabilities.js';
-import { NotYetImplementedError } from './errors.js';
+// NotYetImplementedError is no longer thrown from index.ts — all Plan
+// 06-06 stubs were replaced. The class is still exported from ./errors.js
+// for tooling that may reference it across the milestone (e.g. conformance
+// suite skip-predicates in Phase 7).
 import { ensureBd, type BeadsRuntimeState } from './init.js';
 import * as P from './primitives.js';
 import * as T from './txn.js';
@@ -24,12 +27,13 @@ import * as E from './events.js';
 /**
  * BeadsAdapter — StorageAdapter implementation against `bd` CLI v1.0.3.
  *
- * Plan 06-01: scaffold only. Every method throws NotYetImplementedError.
+ * Plan 06-01: scaffold only. Every method threw NotYetImplementedError.
  *   - Plan 06-02 ports bd/helper + bd/findRoot + bd/errors + _atomicWrite
  *   - Plan 06-03 runs bd-primitive spike + locks D-MAPPING + D-TXN outcomes
  *   - Plan 06-04 ports format/{phase,section,frontmatter} + paths.ts
  *   - Plan 06-05 implements Bin A primitives + init() probe + writeBinaryAsset throw (BEADS-01, BEADS-04, BEADS-05)
  *   - Plan 06-06 implements 3 recordState* families + withTransaction + dep-graph synthesizer (BEADS-02, BEADS-03)
+ *     + commitPlanningState noop (OQ-01 resolution). Zero throw-stubs remain.
  *   - Plan 06-07 ships smoke tests + README/CLAUDE.md/CONTRIBUTING.md
  *
  * Dual export per D-RUNTIME-RESOLUTION satisfies both:
@@ -155,7 +159,26 @@ export class BeadsAdapter implements StorageAdapter {
     return P.getNamedDoc(this.projectRoot, this._ensure, category, key, opts);
   }
 
-  async commitPlanningState(_message: string, _files?: string[]): Promise<void> { throw new NotYetImplementedError('commitPlanningState', 'Plan 06-06'); }
+  /**
+   * `commitPlanningState` is a NOOP on BeadsAdapter.
+   *
+   * Per DECISIONS.md `D-2026-05-12-OQ01-BEADS` (OQ-01 resolution): bd
+   * manages its own SQLite+JSONL store with per-write atomicity
+   * guarantees. There is no git-equivalent "commit" operation from an
+   * adapter perspective. Checkpoint semantics, where needed, are
+   * provided via `withTransaction` (atomic commit/rollback across
+   * multiple writes) — not via a separate commit phase.
+   *
+   * The method exists to satisfy the StorageAdapter contract (which is
+   * not capability-gated). MarkdownAdapter's commit-to-git behavior has
+   * no analog here, so callers that relied on commitPlanningState for a
+   * "mark a stable point" semantic should migrate to withTransaction.
+   */
+  async commitPlanningState(_message: string, _files?: string[]): Promise<void> {
+    void _message;
+    void _files;
+    // intentional noop; see JSDoc for rationale.
+  }
 
   // Event families (D-01/D-04) — return StateWriteOutcome per D-2026-05-10-08.
   // Dispatch per D-MAPPING Outcome A (DECISIONS.md D-2026-05-12-OQ06-MAPPING).

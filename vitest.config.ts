@@ -7,8 +7,15 @@ import { defineConfig } from 'vitest/config';
  * parallel workers against a shared store causes dolt deadlocks.
  * Force single-fork execution per project root.
  *
- * Test timeout = 10s — bd cold-start is 400-700ms; several spawns per
- * test is normal; tight budgets would make CI flaky.
+ * Test timeout = 30s (Plan 06-06 deviation — Rule 1 bug fix).
+ * Historical 10s was workable on the 33-test Plan 06-05 baseline; the
+ * 38 tests added by Plan 06-06 (9 transaction + 18 state-events +
+ * 8 dep-graph + 3 commit-planning-state) push total wall-clock on the
+ * single-fork sweep high enough that concurrent-file execution within
+ * the fork can starve individual tests past the 10s ceiling even though
+ * raw bd-spawn work would fit. Per-test overrides are used on known
+ * long-chain tests (mutation round-trip, signal round-trip); the 30s
+ * default covers the remainder.
  */
 export default defineConfig({
   test: {
@@ -20,6 +27,6 @@ export default defineConfig({
     // dolt exclusive write-lock.
     pool: 'forks',
     singleFork: true,
-    testTimeout: 10_000,
+    testTimeout: 30_000,
   },
 });

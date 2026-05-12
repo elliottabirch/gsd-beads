@@ -50,6 +50,7 @@ import {
   mergeFrontmatter,
   type FrontmatterValue,
 } from './format/frontmatter.js';
+import { materializeGraphJson } from './dep-graph.js';
 
 /**
  * CR-01 BLOCKER fix: centralized path-traversal guard. Resolves `relPath`
@@ -99,6 +100,13 @@ export async function getRecord(
   ensure: () => Promise<BeadsRuntimeState>,
   path: string,
 ): Promise<string | null> {
+  // BEADS-03 / D-OQ06: intercept graph.json reads and materialize lazily
+  // from bd's `blocks`-type dependency edges. Spike-014 established that
+  // a single `bd export --json` surfaces all edges (≤2-spawn budget).
+  if (path === 'graphs/graph.json') {
+    const { bd } = await ensure();
+    return materializeGraphJson(bd);
+  }
   const route = resolveRoute(path);
   if (route.tier === 'bd' && route.label) {
     const { bd } = await ensure();
