@@ -34,6 +34,19 @@ export interface DiskStatusInput {
  * Sibling semantics preserved verbatim — in particular `summaryCount > 0`
  * alone (without planCount > 0) still returns 'partial', matching sibling's
  * behavior for orphan-summary detection.
+ *
+ * WR-08 caller-semantic note (Phase 7 CONFORM-04 follow-up):
+ *   The 'partial' value conflates two distinct conditions:
+ *     (a) summaryCount > 0 AND summaryCount < planCount
+ *         (typical: some plans done, some not)
+ *     (b) summaryCount > 0 AND planCount === 0
+ *         (orphan summary — summaries without any plan)
+ *   Downstream consumers that interpret 'partial' strictly as (a) will
+ *   mis-route orphan-summary cases. v1.0 keeps the collapsed semantic
+ *   for sibling-carry-forward parity; Phase 7 may introduce a distinct
+ *   'orphan-summary' enum value once consumers are audited.
+ *   `tests/unit/deriveDiskStatus.test.ts` locks in the current semantic
+ *   so unintentional drift is caught in CI.
  */
 export function deriveDiskStatus(input: DiskStatusInput): DiskStatus {
   const { planCount, summaryCount, hasContext, hasResearch, dirExists } = input;
