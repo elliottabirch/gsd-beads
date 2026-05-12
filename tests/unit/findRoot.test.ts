@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { realpathSync } from 'node:fs';
 import { findBeadsRoot } from '../../src/bd/findRoot.js';
+import { BdManagedMismatchError } from '../../src/bd/errors.js';
 
 describe('findBeadsRoot — 4 topology cases', () => {
   let base: string;
@@ -25,12 +26,16 @@ describe('findBeadsRoot — 4 topology cases', () => {
     expect(findBeadsRoot(base)).toBe(expected);
   });
 
-  it('case 1b: BEADS_DIR env set but metadata.json missing → walks up (env not honored without metadata)', async () => {
+  it('case 1b (WR-07): BEADS_DIR env set but metadata.json missing → throws BdManagedMismatchError (fail-loud, no silent fallback)', async () => {
+    // Pre-WR-07: the implementation silently fell through to the parent-
+    // walk when BEADS_DIR pointed at an invalid directory, masking the
+    // configuration error (typo / stale / wrong user) as "no bd-managed
+    // ancestor found." The WR-07 fix throws a typed error so callers see
+    // the misconfiguration loudly.
     const bd = join(base, 'beads-dir-empty');
     await mkdir(bd, { recursive: true });
     process.env.BEADS_DIR = bd;
-    // env doesn't resolve; fall through to parent-walk, which finds nothing
-    expect(findBeadsRoot(base)).toBeNull();
+    expect(() => findBeadsRoot(base)).toThrow(BdManagedMismatchError);
   });
 
   it('case 2: parent-walk finds .beads/metadata.json', async () => {

@@ -17,6 +17,8 @@
 import { existsSync, realpathSync, statSync, readFileSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 
+import { BdManagedMismatchError } from './errors.js';
+
 /**
  * Locate the project root of a bd-managed workspace by walking upward from
  * `start`. Returns the project root path (parent of `.beads/`), or `null`
@@ -36,6 +38,11 @@ import { resolve, join, dirname } from 'node:path';
 export function findBeadsRoot(start: string): string | null {
   const envDir = process.env.BEADS_DIR;
   if (envDir) {
+    // WR-07 fix: when BEADS_DIR is set, it is authoritative. Falling back
+    // to the parent-walk when BEADS_DIR points at a directory without
+    // metadata.json silently masks configuration errors (typo, stale path,
+    // wrong user). Throw `BdManagedMismatchError` loudly instead — matches
+    // the fail-fast pattern used elsewhere in the adapter lifecycle.
     let resolved: string | null;
     try {
       resolved = realpathSync(resolve(envDir));
@@ -45,6 +52,10 @@ export function findBeadsRoot(start: string): string | null {
     if (resolved && existsSync(join(resolved, 'metadata.json'))) {
       return dirname(resolved);
     }
+    throw new BdManagedMismatchError(
+      envDir,
+      'BEADS_DIR is set but does not point at a directory containing metadata.json. Fix the env var or unset it.',
+    );
   }
   let dir: string;
   try {
