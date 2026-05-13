@@ -388,6 +388,9 @@ export async function stat(
 ): Promise<{ kind: 'file' | 'dir'; mtime?: string } | null> {
   const route = resolveRoute(path);
   if (route.tier === 'bd' && route.label) {
+    // Collection routes (phase-collection, etc.) represent logical directories —
+    // return kind:'dir' without a record lookup (no record exists for them).
+    if (route.collection) return { kind: 'dir' };
     const r = await getRecord(projectRoot, ensure, path);
     return r === null ? null : { kind: 'file' };
   }
